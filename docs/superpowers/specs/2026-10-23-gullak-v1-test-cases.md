@@ -207,6 +207,8 @@ One anonymised sample per bank lives in `server/src/test/resources/statements/`.
 | API-AUTH-11 | Verify for another email | code issued to A, sent with email B | 401 OTP_INVALID |
 | API-AUTH-12 | Refresh | POST /auth/refresh | 200 new pair; old token used_at set |
 | API-AUTH-13 | Refresh reuse | the old token again | 401 TOKEN_REUSED; every refresh token for the user revoked |
+| API-AUTH-13b | Stale token is not a kill switch | refresh with a logged-out token, or a used token after its expiry | 401 (UNAUTHENTICATED or TOKEN_EXPIRED); the user's other sessions keep working |
+| API-AUTH-17b | Logout after the access token expired | POST /auth/logout with an expired bearer header | 204; refresh token revoked |
 | API-AUTH-14 | Refresh expired | 31 days old | 401 TOKEN_EXPIRED |
 | API-AUTH-15 | Refresh after logout | | 401 |
 | API-AUTH-16 | Web refresh needs header | cookie present, no X-Requested-With | 403 CSRF |

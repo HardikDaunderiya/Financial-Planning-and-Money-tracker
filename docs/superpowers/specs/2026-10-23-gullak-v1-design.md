@@ -421,7 +421,7 @@ Login and sessions:
 - Rate limits per email and per IP on OTP request and verify. The client IP comes from `X-Forwarded-For` only when the connection is from a configured trusted proxy (`GULLAK_TRUSTED_PROXIES`); otherwise the socket address is used.
 - Access token: JWT, 15 minutes, signed with a server key, carries only the user ID. Refresh token: random 256-bit, 30 days, stored hashed, single use, rotated on every refresh. Reuse of a spent refresh token revokes every session for that user.
 - On the phone, tokens live in Expo SecureStore. On the web, the refresh token is an `httpOnly`, `Secure`, `SameSite=Strict` cookie and the access token stays in memory; refresh needs a custom header, which blocks CSRF.
-- Sign out revokes the refresh token server-side.
+- Sign out revokes the refresh token server-side. Only a refresh token that was already used counts as reuse and revokes every session; an expired or logged-out token is simply rejected. Access tokens on the public auth routes are ignored, so refresh and logout work after the access token expires. An access token stays valid until its 15-minute expiry after logout (stateless by design).
 
 Authorisation:
 

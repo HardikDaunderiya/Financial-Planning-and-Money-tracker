@@ -2529,6 +2529,10 @@ public class UserMdcFilter extends OncePerRequestFilter {
 
 `RequestLogFilter` clears the MDC when the request ends, so this filter does not.
 
+- [ ] **Step 4b: Detect token expiry by type, not by message text**
+
+Ruling carried from the Task 2 review: `JsonAuthHandlers` must not search exception messages. In `JwtConfig.jwtDecoder`, wrap the timestamp check in a validator of our own that returns `OAuth2Error` with error code `token_expired` when `exp` has passed (use the injected `Clock`, zero skew), keep `JwtIssuerValidator`, and drop `JwtTimestampValidator`. In `JsonAuthHandlers.commence`, walk the cause chain of the `AuthenticationException`; if it contains a `JwtValidationException` whose `getErrors()` has an error with code `token_expired`, answer 401 `TOKEN_EXPIRED`, otherwise 401 `UNAUTHENTICATED`. Remove the `contains("expired")` check. Add `server/src/test/java/in/gullak/common/error/JsonAuthHandlersTest.java` (plain unit test, `MockHttpServletRequest`/`MockHttpServletResponse`) covering: an `InvalidBearerTokenException` caused by a `JwtValidationException` with `token_expired` → `TOKEN_EXPIRED`; any other `AuthenticationException` whose message contains the word "expired" → `UNAUTHENTICATED`; `handle` with `AccessDeniedException` → 403 `FORBIDDEN`. Make sure `oauth2ResourceServer(...).authenticationEntryPoint(handlers)` is wired so bearer-token failures reach this entry point; `expiredAccessTokenIsRejected` in `TokenApiTest` proves it end to end.
+
 - [ ] **Step 5: Write the refresh-token entity, repository and the full token service**
 
 `server/src/main/java/in/gullak/auth/RefreshTokenEntity.java`:

@@ -343,7 +343,7 @@ gullak/
 - Validate at the edge with `jakarta.validation` on request records (`@Positive` amounts, `@Size`, `@Pattern`). Services assume valid input and enforce business rules.
 - One `@RestControllerAdvice` turns exceptions into `{code, message}` with the right status. Business errors are typed exceptions with a code from one enum shared with the app.
 - `@Transactional` on service methods that write; read-only methods marked `readOnly = true`.
-- Spring Data JPA for simple access; JDBC or native queries for the budget, insights and matching queries, with tests against real Postgres.
+- Data access uses Spring's `JdbcClient` with explicit SQL everywhere, including the budget, insights and matching queries, tested against real Postgres. No JPA.
 - Flyway owns the schema. No `ddl-auto`. Every migration is forward-only and reviewed.
 - Configuration through `application.yml` and environment variables. Secrets never in the repository.
 - Scheduled jobs (daily close, off-track push, draft cleanup) are idempotent, keyed by (user, date), and use a database lock so two instances cannot run the same job.

@@ -7,6 +7,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.jayway.jsonpath.JsonPath;
 import in.gullak.TestcontainersConfiguration;
 import in.gullak.auth.InMemoryOtpMailer;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
@@ -117,5 +120,16 @@ public abstract class ApiTest {
         addFixedCost(user, "Monthly groceries", 150_000);
         putProfile(user, EXAMPLE_PROFILE).andExpect(status().isOk());
         return user;
+    }
+
+    /** Plan 3 adds POST /transactions; until then tests insert spends directly. */
+    protected void seedSpend(TestUser user, long paise, Instant at) {
+        jdbc.sql("""
+                insert into transactions (id, user_id, client_id, amount_paise, direction, occurred_at,
+                    category_code, payment_method, source, status)
+                values (?, ?, ?, ?, 'debit', ?, 'eating_out', 'upi', 'manual', 'pending')
+                """)
+            .params(UUID.randomUUID(), user.id(), UUID.randomUUID(), paise, OffsetDateTime.ofInstant(at, ZoneOffset.UTC))
+            .update();
     }
 }

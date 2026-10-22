@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 class SourceRulesTest {
     static final Path MAIN = Path.of("src/main/java");
 
-    static final Pattern EMPTY_CATCH = Pattern.compile("catch\\s*\\([^)]*\\)\\s*\\{\\s*}");
+    static final Pattern EMPTY_CATCH = Pattern.compile("catch\\s*\\([^)]*\\)\\s*\\{(\\s|/\\*.*?\\*/|//[^\\n]*)*}", Pattern.DOTALL);
     static final Pattern BROAD_CATCH =
         Pattern.compile("catch\\s*\\(\\s*(final\\s+)?(Exception|RuntimeException|Throwable)\\s+\\w+\\s*\\)");
     static final Pattern CONCAT_IN_LOG =
@@ -25,6 +25,11 @@ class SourceRulesTest {
     @Test
     void patternsCatchWhatTheyShould() {
         assertThat(EMPTY_CATCH.matcher("catch (IOException e) { }").find()).isTrue();
+        assertThat(EMPTY_CATCH.matcher("catch (IOException e) { /* ignore */ }").find()).isTrue();
+        assertThat(EMPTY_CATCH.matcher("catch (IOException e) { // ignore\n }").find()).isTrue();
+        assertThat(EMPTY_CATCH.matcher("catch (IOException e) { log.warn(\"x\"); }").find()).isFalse();
+        assertThat(SYSTEM_OUT.matcher("System.out.println(1)").find()).isTrue();
+        assertThat(SYSTEM_OUT.matcher("log.info(\"x\")").find()).isFalse();
         assertThat(BROAD_CATCH.matcher("catch (Exception e)").find()).isTrue();
         assertThat(BROAD_CATCH.matcher("catch (final Throwable t)").find()).isTrue();
         assertThat(BROAD_CATCH.matcher("catch (IOException e)").find()).isFalse();

@@ -35,6 +35,8 @@ public class SecurityConfig {
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(a -> a
                 .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
+                // Anything else under /actuator is not exposed: let it fall through to a 404, not a 401.
+                .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers(PUBLIC_AUTH).permitAll()
                 .anyRequest().authenticated())
             .oauth2ResourceServer(o -> o

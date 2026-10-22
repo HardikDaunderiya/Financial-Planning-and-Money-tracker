@@ -28,12 +28,12 @@ Secrets come only from environment variables. Never commit them.
 | Method | Path | Notes |
 |---|---|---|
 | POST | /api/v1/auth/otp/request | `{email}` → 204 |
-| POST | /api/v1/auth/otp/verify | `{email, code, device}` → `{accessToken, refreshToken, expiresIn}` |
+| POST | /api/v1/auth/otp/verify | `{email, code, device?}` → `{accessToken, refreshToken, expiresIn}` |
 | POST | /api/v1/auth/refresh | `{refreshToken}` → new pair; reuse revokes every session |
 | POST | /api/v1/auth/logout | `{refreshToken}` → 204 |
-| GET, PUT | /api/v1/me/profile | income, savings, payday, personality, message times |
+| GET, PUT | /api/v1/me/profile | income, savings, payday, personality, message times; GET is 409 `SETUP_INCOMPLETE` until the first PUT |
 | GET, POST | /api/v1/me/fixed-costs | list, add |
 | PATCH, DELETE | /api/v1/me/fixed-costs/{id} | edit, remove |
-| GET | /api/v1/budget/today | budget, spent, left, mood, line, cycle |
+| GET | /api/v1/budget/today | `date, budgetPaise, spentPaise, leftPaise, overPaise, poolOverPaise, mood, line, daysLeft, cycleStart, cycleEnd` |
 
-All amounts are paise. Errors are `{code, message}`; see `server/src/main/java/in/gullak/common/error/ErrorCode.java`.
+All amounts are paise, sent as JSON numbers (strings are rejected). Request bodies over 64 KB are 413 `TOO_LARGE`. Errors are `{code, message}`; see `server/src/main/java/in/gullak/common/error/ErrorCode.java`.

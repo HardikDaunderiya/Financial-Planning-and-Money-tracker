@@ -43,6 +43,8 @@ logging:
   pattern:
     correlation: "[%X{requestId:-}] [%X{userId:-}] "
 gullak:
+  http:
+    max-body-bytes: 65536
   auth:
     jwt-secret: ${GULLAK_JWT_SECRET}
     otp-pepper: ${GULLAK_OTP_PEPPER}

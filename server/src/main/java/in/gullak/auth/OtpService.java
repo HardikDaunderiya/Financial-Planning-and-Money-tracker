@@ -22,6 +22,8 @@ public class OtpService {
     private static final String INVALID = "That code didn't work. Check it or request a new one.";
     private static final Logger log = LoggerFactory.getLogger(OtpService.class);
     private static final Duration WINDOW = Duration.ofMinutes(10);
+    private static final int VERIFY_EMAIL_LIMIT = 30;
+    private static final Duration VERIFY_EMAIL_WINDOW = Duration.ofMinutes(15);
 
     private final OtpCodeRepository codes;
     private final UserRepository users;
@@ -61,6 +63,7 @@ public class OtpService {
     public UUID verify(String rawEmail, String code, String ip) {
         String email = Emails.normalize(rawEmail);
         limiter.check("otp-verify-ip:" + ip, 30, WINDOW);
+        limiter.check("otp-verify-email:" + email, VERIFY_EMAIL_LIMIT, VERIFY_EMAIL_WINDOW);
         OtpCodeEntity otp = codes.findFirstByEmailAndConsumedAtIsNull(email)
             .orElseThrow(() -> new AuthException(ErrorCode.OTP_INVALID, INVALID));
 

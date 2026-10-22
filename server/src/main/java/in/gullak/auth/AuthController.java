@@ -1,5 +1,6 @@
 package in.gullak.auth;
 
+import in.gullak.common.web.SingleLineText;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
@@ -21,7 +22,7 @@ class AuthController {
     record OtpVerify(
         @NotBlank @Email @Size(max = 254) String email,
         @NotBlank @Pattern(regexp = "\\d{6}") String code,
-        @Size(max = 60) String device) {}
+        @Size(max = 60) @SingleLineText String device) {}
 
     record RefreshRequest(@NotBlank @Size(max = 100) String refreshToken) {}
 

@@ -58,7 +58,16 @@ public class GlobalExceptionHandler {
         MissingServletRequestParameterException.class,
         MissingServletRequestPartException.class
     })
-    ResponseEntity<ErrorBody> unreadable() {
+    ResponseEntity<ErrorBody> unreadable(Exception e) {
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            if (t instanceof BodyTooLargeException) {
+                return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                    .body(ErrorBody.of(ErrorCode.TOO_LARGE, "That request is too big"));
+            }
+            if (t.getCause() == t) {
+                break;
+            }
+        }
         return badRequest(null);
     }
 

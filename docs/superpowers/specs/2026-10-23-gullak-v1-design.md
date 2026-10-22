@@ -50,7 +50,7 @@ The data pipeline is built so that Account Aggregator can be added in V2 as one 
 
 A cycle runs from one payday to the day before the next. Payday is one of: a fixed day of the month (1 to 28), the last working day (last Monday to Friday of the month; public holidays are ignored in V1), or "another date" (also 1 to 28). Changing the payday takes effect from the next cycle. Changes to income, fixed costs or savings apply to the current cycle at once.
 
-All budget maths is done in paise and rounded down; the app shows whole rupees.
+All budget maths is done in paise and rounded down; the app shows whole rupees. The daily budget itself is rounded down to whole rupees, and the paise remainder stays in the pool, so every figure on screen adds up.
 
 For each cycle:
 
@@ -176,7 +176,7 @@ Logging accuracy = confirmed spends ÷ (confirmed + statement-only spends) for t
 
 ### 2.6 The Gullak and the game
 
-Mood follows today's budget used: 0 to 49% happy, 50 to 79% calm, 80 to 100% nervous, over 100% fainted. Celebrating shows for a moment on a streak day, a milestone or a level-up. The Gullak never dies; a fainted Gullak is back the next morning.
+Mood follows today's budget used: 0 to 49% happy, 50 to 79% calm, 80 to 100% nervous, over 100% fainted. A ₹0 budget with nothing overspent (the pool at exactly zero, or too small to give ₹1 a day) shows nervous, not fainted; the Gullak faints only when today's spend passes the budget or the pool goes below zero. The fainted line's "over by" figure is today's overspend plus any amount the pool is below zero. Celebrating shows for a moment on a streak day, a milestone or a level-up. The Gullak never dies; a fainted Gullak is back the next morning.
 
 Growth stages by level: clay pot (levels 1 to 4), painted (5 to 9), gold (10 to 19), diamond (20 and up). Reaching a stage is a full-screen moment with a share button.
 

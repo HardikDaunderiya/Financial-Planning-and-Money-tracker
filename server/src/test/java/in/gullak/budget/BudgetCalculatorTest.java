@@ -1,6 +1,7 @@
 package in.gullak.budget;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -21,8 +22,8 @@ class BudgetCalculatorTest {
     @Test
     void exampleDay() { // BUD-07
         DailyBudget b = example(966_000, 18_000, 9);
-        assertThat(b.budgetPaise()).isEqualTo(59_333);
-        assertThat(b.leftPaise()).isEqualTo(41_333);
+        assertThat(b.budgetPaise()).isEqualTo(59_300);
+        assertThat(b.leftPaise()).isEqualTo(41_300);
         assertThat(b.percentUsed()).isEqualTo(30);
         assertThat(b.mood()).isEqualTo(Mood.HAPPY);
     }
@@ -37,10 +38,10 @@ class BudgetCalculatorTest {
     @Test
     void overspendLowersTomorrow() { // BUD-09
         DailyBudget today = example(966_000, 72_000, 9);
-        assertThat(today.overPaise()).isEqualTo(72_000 - 59_333);
+        assertThat(today.overPaise()).isEqualTo(72_000 - 59_300);
         assertThat(today.mood()).isEqualTo(Mood.FAINTED);
         DailyBudget tomorrow = example(966_000 + 72_000, 0, 8);
-        assertThat(tomorrow.budgetPaise()).isEqualTo(57_750);
+        assertThat(tomorrow.budgetPaise()).isEqualTo(57_700);
     }
 
     @Test
@@ -81,7 +82,48 @@ class BudgetCalculatorTest {
     @Test
     void roundsDown() { // BUD-27
         DailyBudget b = BudgetCalculator.compute(new BudgetInput(100_000, 0, 0, 0, 0, 3));
-        assertThat(b.budgetPaise()).isEqualTo(33_333);
+        assertThat(b.budgetPaise()).isEqualTo(33_300);
+    }
+
+    @Test
+    void budgetIsWholeRupeesAndTheRemainderStaysInThePool() { // BUD-27
+        DailyBudget b = example(966_000, 0, 9);
+        assertThat(b.poolPaise()).isEqualTo(534_000);
+        assertThat(b.budgetPaise()).isEqualTo(59_300);
+        assertThat(b.budgetPaise() % 100).isZero();
+    }
+
+    @Test
+    void spendingPastAWholeRupeeBudgetIsOverByThePaise() { // BUD-07 (whole-rupee budget)
+        DailyBudget b = example(966_000, 59_400, 9);
+        assertThat(b.budgetPaise()).isEqualTo(59_300);
+        assertThat(b.overPaise()).isEqualTo(100);
+        assertThat(b.leftPaise()).isZero();
+        assertThat(b.mood()).isEqualTo(Mood.FAINTED);
+    }
+
+    @Test
+    void poolExactlyZeroWithNothingSpentIsNervousNotFainted() { // BUD-10 (pool at zero)
+        DailyBudget b = example(1_500_000, 0, 10);
+        assertThat(b.poolPaise()).isZero();
+        assertThat(b.budgetPaise()).isZero();
+        assertThat(b.leftPaise()).isZero();
+        assertThat(b.overPaise()).isZero();
+        assertThat(b.mood()).isEqualTo(Mood.NERVOUS);
+    }
+
+    @Test
+    void tinyPositivePoolBelowOneRupeePerDayIsNervous() { // BUD-10 (pool too small for ₹1 a day)
+        DailyBudget b = example(1_499_800, 0, 3);
+        assertThat(b.poolPaise()).isEqualTo(200);
+        assertThat(b.budgetPaise()).isZero();
+        assertThat(b.mood()).isEqualTo(Mood.NERVOUS);
+    }
+
+    @Test
+    void zeroDaysLeftIsRejected() {
+        assertThatThrownBy(() -> new BudgetInput(INCOME, FIXED, SAVINGS, 0, 0, 0))
+            .isInstanceOf(IllegalArgumentException.class);
     }
 
     @ParameterizedTest

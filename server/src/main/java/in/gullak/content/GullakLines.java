@@ -32,7 +32,7 @@ public final class GullakLines {
             "Over by {over}? Beta, ghar pe khana nahi hai kya?");
         put(Personality.HYPE,
             "{left} to play with today. Look at you go.",
-            "{left} left and you’re cruising.",
+            "{left} left and you’re cruising",
             "{left} left. You’ve got this, finish strong.",
             "Over by {over}, but you logged it all. That’s growth.");
     }
@@ -40,7 +40,7 @@ public final class GullakLines {
     private GullakLines() {}
 
     public static String line(Personality personality, DailyBudget b) {
-        long over = b.overPaise() > 0 ? b.overPaise() : b.poolOverPaise();
+        long over = b.overPaise() + b.poolOverPaise();
         return LINES.get(personality).get(b.mood())
             .replace("{left}", RupeeFormat.format(b.leftPaise()))
             .replace("{over}", RupeeFormat.format(over));

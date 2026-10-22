@@ -2,11 +2,16 @@ package in.gullak.support;
 
 import in.gullak.common.error.ErrorCode;
 import in.gullak.common.error.NotFoundException;
+import in.gullak.common.error.RateLimitedException;
+import in.gullak.common.error.ValidationException;
 import in.gullak.common.error.UnprocessableException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import java.util.Map;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -41,5 +46,30 @@ class ErrorProbeController {
     @GetMapping("/boom")
     void boom() {
         throw new IllegalStateException("secret internal detail");
+    }
+
+    @GetMapping("/echo")
+    Map<String, Long> echo(@RequestParam long n) {
+        return Map.of("n", n);
+    }
+
+    @GetMapping("/validation")
+    void validation() {
+        throw new ValidationException("Pick a day");
+    }
+
+    @GetMapping("/rate-limited")
+    void rateLimited() {
+        throw new RateLimitedException();
+    }
+
+    @GetMapping("/denied")
+    void denied() {
+        throw new AccessDeniedException("nope");
+    }
+
+    @GetMapping("/bad-credentials")
+    void badCredentials() {
+        throw new BadCredentialsException("nope");
     }
 }

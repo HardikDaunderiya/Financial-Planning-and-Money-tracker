@@ -14,6 +14,7 @@ public enum ErrorCode {
     NOT_FOUND(false),
     METHOD_NOT_ALLOWED(false),
     UNSUPPORTED_MEDIA_TYPE(false),
+    NOT_ACCEPTABLE(false),
     TOO_LARGE(false),
     NOT_POSSIBLE(false),
     SETUP_INCOMPLETE(false),

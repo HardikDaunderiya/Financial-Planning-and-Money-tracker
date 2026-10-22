@@ -12,9 +12,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import in.gullak.support.ApiTest;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 
+@ExtendWith(OutputCaptureExtension.class)
 class ErrorHandlingApiTest extends ApiTest {
 
     @Test
@@ -49,7 +53,9 @@ class ErrorHandlingApiTest extends ApiTest {
         mvc.perform(get("/test-probe/not-found").with(user("u")))
             .andExpect(status().isNotFound())
             .andExpect(jsonPath("$.code").value("NOT_FOUND"))
-            .andExpect(jsonPath("$.message").value("Thing not found"));
+            .andExpect(jsonPath("$.message").value("Thing not found"))
+            .andExpect(jsonPath("$.fields").doesNotExist())
+            .andExpect(jsonPath("$.errorId").doesNotExist());
     }
 
     @Test
@@ -90,5 +96,69 @@ class ErrorHandlingApiTest extends ApiTest {
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"))
             .andExpect(jsonPath("$.message").value("Sign in to continue"));
+    }
+
+    @Test
+    void wrongContentTypeIs415() throws Exception {
+        mvc.perform(post("/test-probe/validate").with(user("u"))
+                .contentType(MediaType.TEXT_PLAIN).content("hi"))
+            .andExpect(status().isUnsupportedMediaType())
+            .andExpect(jsonPath("$.code").value("UNSUPPORTED_MEDIA_TYPE"));
+    }
+
+    @Test
+    void badQueryParameterIsValidation() throws Exception {
+        mvc.perform(get("/test-probe/echo?n=abc").with(user("u")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("VALIDATION"));
+    }
+
+    @Test
+    void missingQueryParameterIsValidation() throws Exception {
+        mvc.perform(get("/test-probe/echo").with(user("u")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("VALIDATION"));
+    }
+
+    @Test
+    void validationExceptionKeepsMessage() throws Exception {
+        mvc.perform(get("/test-probe/validation").with(user("u")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("VALIDATION"))
+            .andExpect(jsonPath("$.message").value("Pick a day"));
+    }
+
+    @Test
+    void rateLimitedIs429AndWarns(CapturedOutput output) throws Exception {
+        mvc.perform(get("/test-probe/rate-limited").with(user("u")))
+            .andExpect(status().isTooManyRequests())
+            .andExpect(jsonPath("$.code").value("RATE_LIMITED"));
+        org.assertj.core.api.Assertions.assertThat(output.getAll()).contains("error.expected code=RATE_LIMITED");
+    }
+
+    @Test
+    void accessDeniedIs403NotInternal(CapturedOutput output) throws Exception {
+        mvc.perform(get("/test-probe/denied").with(user("u")))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("FORBIDDEN"))
+            .andExpect(jsonPath("$.message").value("Not allowed"));
+        org.assertj.core.api.Assertions.assertThat(output.getAll()).doesNotContain("error.unexpected");
+    }
+
+    @Test
+    void authenticationExceptionIs401NotInternal(CapturedOutput output) throws Exception {
+        mvc.perform(get("/test-probe/bad-credentials").with(user("u")))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"))
+            .andExpect(jsonPath("$.message").value("Sign in to continue"));
+        org.assertj.core.api.Assertions.assertThat(output.getAll()).doesNotContain("error.unexpected");
+    }
+
+    @Test
+    void notAcceptableIs406() throws Exception {
+        mvc.perform(get("/test-probe/ok").with(user("u")).accept(MediaType.APPLICATION_XML))
+            .andExpect(status().isNotAcceptable())
+            .andExpect(jsonPath("$.code").value("NOT_ACCEPTABLE"))
+            .andExpect(jsonPath("$.message").value("Ask for JSON"));
     }
 }

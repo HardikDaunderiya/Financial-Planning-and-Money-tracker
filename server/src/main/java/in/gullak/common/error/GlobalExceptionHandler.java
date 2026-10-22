@@ -7,6 +7,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.HttpMediaTypeNotAcceptableException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -16,6 +19,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
@@ -51,7 +55,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({
         HttpMessageNotReadableException.class,
         MethodArgumentTypeMismatchException.class,
-        MissingServletRequestParameterException.class
+        MissingServletRequestParameterException.class,
+        MissingServletRequestPartException.class
     })
     ResponseEntity<ErrorBody> unreadable() {
         return badRequest(null);
@@ -78,6 +83,24 @@ public class GlobalExceptionHandler {
     ResponseEntity<ErrorBody> wrongMediaType() {
         return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
             .body(ErrorBody.of(ErrorCode.UNSUPPORTED_MEDIA_TYPE, "Send JSON"));
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotAcceptableException.class)
+    ResponseEntity<ErrorBody> notAcceptable() {
+        return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE)
+            .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+            .body(ErrorBody.of(ErrorCode.NOT_ACCEPTABLE, "Ask for JSON"));
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    ResponseEntity<ErrorBody> accessDenied() {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ErrorBody.of(ErrorCode.FORBIDDEN, "Not allowed"));
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    ResponseEntity<ErrorBody> unauthenticated() {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+            .body(ErrorBody.of(ErrorCode.UNAUTHENTICATED, "Sign in to continue"));
     }
 
     @ExceptionHandler(Exception.class)

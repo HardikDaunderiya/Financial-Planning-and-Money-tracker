@@ -48,7 +48,9 @@ The data pipeline is built so that Account Aggregator can be added in V2 as one 
 
 ### 2.1 Budget cycle and daily budget
 
-A cycle runs from one payday to the day before the next. Payday is one of: a fixed day of the month (1 to 28), the last working day (last Monday to Friday of the month; public holidays are ignored in V1), or "another date" (also 1 to 28). Changing the payday takes effect from the next cycle.
+A cycle runs from one payday to the day before the next. Payday is one of: a fixed day of the month (1 to 28), the last working day (last Monday to Friday of the month; public holidays are ignored in V1), or "another date" (also 1 to 28). Changing the payday takes effect from the next cycle. Changes to income, fixed costs or savings apply to the current cycle at once.
+
+All budget maths is done in paise and rounded down; the app shows whole rupees.
 
 For each cycle:
 
@@ -466,6 +468,8 @@ DPDP (India's data protection act):
 - Jobs: daily close at 00:05 Asia/Kolkata (grades, streaks, freezes, XP, `daily_closes` row), off-track push after the close, draft import cleanup, deletion after grace. All idempotent, retried on failure, and a repeated failure sends an alert.
 
 ### 4.9 Testing
+
+The full list of test cases, positive and negative, with IDs, is in `docs/superpowers/specs/2026-10-23-gullak-v1-test-cases.md`. Every task in the implementation plan names the cases it must make pass. The table below is the summary by layer.
 
 | Layer | What | Tool |
 |---|---|---|

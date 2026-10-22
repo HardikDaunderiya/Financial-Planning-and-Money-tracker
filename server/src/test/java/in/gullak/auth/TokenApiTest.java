@@ -11,6 +11,7 @@ import in.gullak.support.ApiTest;
 import in.gullak.support.TestUser;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -18,10 +19,18 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwsHeader;
+import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 class TokenApiTest extends ApiTest {
+    @Autowired JwtEncoder encoder;
 
     @Test
     void accessTokenIdentifiesTheUser() throws Exception { // API-AUTH-06
@@ -135,6 +144,111 @@ class TokenApiTest extends ApiTest {
         Integer live = jdbc.sql("select count(*) from refresh_tokens where user_id = ? and revoked_at is null and used_at is null")
             .param(u.id()).query(Integer.class).single();
         assertThat(live).isZero();
+    }
+
+    // --- Bearer headers on the public auth routes are ignored ---
+
+    @Test
+    void refreshWorksWithAnExpiredBearerHeader() throws Exception {
+        TestUser u = signIn();
+        clock.advance(Duration.ofMinutes(16));
+        refresh(u.refreshToken(), auth(u)).andExpect(status().isOk());
+    }
+
+    @Test
+    void refreshWorksWithAGarbageBearerHeader() throws Exception {
+        TestUser u = signIn();
+        refresh(u.refreshToken(), bearer("garbage")).andExpect(status().isOk());
+    }
+
+    @Test
+    void logoutWorksWithAnExpiredBearerHeader() throws Exception {
+        TestUser u = signIn();
+        clock.advance(Duration.ofMinutes(16));
+        logout(u.refreshToken(), auth(u)).andExpect(status().isNoContent());
+        refresh(u.refreshToken()).andExpect(status().isUnauthorized());
+        Integer live = jdbc.sql("select count(*) from refresh_tokens where user_id = ? and revoked_at is null")
+            .param(u.id()).query(Integer.class).single();
+        assertThat(live).isZero();
+    }
+
+    @Test
+    void accessTokenInAFormBodyIsIgnored() throws Exception { // SEC-13
+        TestUser u = signIn();
+        mvc.perform(post("/test-probe/whoami").contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .content("access_token=" + u.accessToken()))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
+    }
+
+    @Test
+    void tokenFromAnotherIssuerIsRejected() throws Exception {
+        TestUser u = signIn();
+        Instant now = clock.instant();
+        JwtClaimsSet claims = JwtClaimsSet.builder()
+            .issuer("evil").subject(u.id().toString()).issuedAt(now).expiresAt(now.plus(Duration.ofMinutes(15)))
+            .build();
+        String forged = encoder.encode(
+            JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims)).getTokenValue();
+        mvc.perform(get("/test-probe/whoami").with(bearer(forged)))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
+    }
+
+    // --- A spent token is not a sign-out-everywhere switch unless it was rotated away ---
+
+    @Test
+    void refreshAfterLogoutLeavesOtherDevicesSignedIn() throws Exception {
+        TestUser phone = signIn();
+        TestUser laptop = signIn(phone.email());
+        logout(phone.refreshToken()).andExpect(status().isNoContent());
+        refresh(phone.refreshToken())
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
+        refresh(laptop.refreshToken()).andExpect(status().isOk());
+    }
+
+    @Test
+    void usedTokenPresentedAfterExpiryIsExpiredAndRevokesNothing() throws Exception {
+        TestUser u = signIn();
+        String second = JsonPath.read(refresh(u.refreshToken()).andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString(), "$.refreshToken");
+        clock.advance(Duration.ofDays(29));
+        String third = JsonPath.read(refresh(second).andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString(), "$.refreshToken");
+        clock.advance(Duration.ofDays(2));
+        refresh(u.refreshToken())
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("TOKEN_EXPIRED"));
+        refresh(third).andExpect(status().isOk());
+    }
+
+    @Test
+    void logoutWithARotatedAwayTokenRevokesEverySession() throws Exception {
+        TestUser phone = signIn();
+        TestUser laptop = signIn(phone.email());
+        String newPhone = JsonPath.read(refresh(phone.refreshToken()).andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString(), "$.refreshToken");
+        logout(phone.refreshToken()).andExpect(status().isNoContent());
+        refresh(laptop.refreshToken()).andExpect(status().isUnauthorized());
+        refresh(newPhone).andExpect(status().isUnauthorized());
+    }
+
+    private ResultActions refresh(String token, RequestPostProcessor extra)
+            throws Exception {
+        return mvc.perform(post("/api/v1/auth/refresh").with(extra).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"refreshToken\":\"" + token + "\"}"));
+    }
+
+    private ResultActions logout(String token) throws Exception {
+        return mvc.perform(post("/api/v1/auth/logout").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"refreshToken\":\"" + token + "\"}"));
+    }
+
+    private ResultActions logout(String token, RequestPostProcessor extra)
+            throws Exception {
+        return mvc.perform(post("/api/v1/auth/logout").with(extra).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"refreshToken\":\"" + token + "\"}"));
     }
 
     private ResultActions refresh(String token) throws Exception {

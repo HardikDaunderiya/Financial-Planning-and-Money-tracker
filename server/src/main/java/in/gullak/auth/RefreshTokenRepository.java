@@ -12,9 +12,9 @@ interface RefreshTokenRepository extends JpaRepository<RefreshTokenEntity, UUID>
 
     Optional<RefreshTokenEntity> findByTokenHash(String tokenHash);
 
-    /** Conditional update: of two racing refreshes, exactly one gets 1 back. */
+    /** Conditional update: of two racing refreshes (or a refresh racing a logout), at most one gets 1 back. */
     @Modifying(flushAutomatically = true, clearAutomatically = true)
-    @Query("update RefreshTokenEntity t set t.usedAt = :now where t.id = :id and t.usedAt is null")
+    @Query("update RefreshTokenEntity t set t.usedAt = :now where t.id = :id and t.usedAt is null and t.revokedAt is null")
     int claim(@Param("id") UUID id, @Param("now") Instant now);
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)

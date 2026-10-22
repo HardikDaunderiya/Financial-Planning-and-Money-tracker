@@ -50,5 +50,8 @@ class RefreshTokenEntity {
     UUID getFamilyId() { return familyId; }
     String getDevice() { return device; }
     Instant getExpiresAt() { return expiresAt; }
-    boolean isSpent() { return usedAt != null || revokedAt != null; }
+    /** Rotated away by a refresh: presenting it again is evidence of theft. */
+    boolean isUsed() { return usedAt != null; }
+    /** Ended by logout or a revocation, without having been rotated. */
+    boolean isRevoked() { return revokedAt != null; }
 }

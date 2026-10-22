@@ -9,12 +9,24 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
+import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+    /**
+     * Public sign-in routes: no access token is read or required here, so an expired or junk
+     * {@code Authorization} header cannot block a refresh or logout. Any future /auth endpoint
+     * that needs a token must move outside this matcher.
+     */
+    static final RequestMatcher PUBLIC_AUTH =
+        PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/**");
+
     @Bean
     SecurityFilterChain api(HttpSecurity http, JsonAuthHandlers handlers) throws Exception {
         http.csrf(c -> c.disable())
@@ -23,11 +35,20 @@ public class SecurityConfig {
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(a -> a
                 .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/v1/auth/**").permitAll()
+                .requestMatchers(PUBLIC_AUTH).permitAll()
                 .anyRequest().authenticated())
-            .oauth2ResourceServer(o -> o.jwt(Customizer.withDefaults()).authenticationEntryPoint(handlers))
+            .oauth2ResourceServer(o -> o
+                .bearerTokenResolver(bearerTokens())
+                .jwt(Customizer.withDefaults())
+                .authenticationEntryPoint(handlers))
             .exceptionHandling(e -> e.authenticationEntryPoint(handlers).accessDeniedHandler(handlers))
             .addFilterAfter(new UserMdcFilter(), BearerTokenAuthenticationFilter.class);
         return http.build();
+    }
+
+    /** Header-only bearer tokens (query and form tokens stay off), ignored on {@link #PUBLIC_AUTH}. */
+    static BearerTokenResolver bearerTokens() {
+        DefaultBearerTokenResolver header = new DefaultBearerTokenResolver();
+        return request -> PUBLIC_AUTH.matches(request) ? null : header.resolve(request);
     }
 }

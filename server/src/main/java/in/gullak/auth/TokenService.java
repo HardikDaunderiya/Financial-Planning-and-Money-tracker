@@ -53,16 +53,24 @@ public class TokenService {
         UUID familyId = row.getFamilyId();
         String device = row.getDevice();
         Instant now = clock.instant();
-        if (row.isSpent()) {
-            revokeAllFor(userId, "reuse");
-            throw new AuthException(ErrorCode.TOKEN_REUSED, "Please sign in again");
-        }
         if (!now.isBefore(row.getExpiresAt())) {
             throw new AuthException(ErrorCode.TOKEN_EXPIRED, "Your session has expired");
         }
-        if (refreshTokens.claim(row.getId(), now) == 0) {
-            revokeAllFor(userId, "race");
+        if (row.isUsed()) {
+            revokeAllFor(userId, "reuse");
             throw new AuthException(ErrorCode.TOKEN_REUSED, "Please sign in again");
+        }
+        if (row.isRevoked()) {
+            throw new AuthException(ErrorCode.UNAUTHENTICATED, "Sign in to continue");
+        }
+        if (refreshTokens.claim(row.getId(), now) == 0) {
+            // claim cleared the persistence context, so this reads the row as committed by the other request.
+            boolean usedMeanwhile = refreshTokens.findById(row.getId()).map(RefreshTokenEntity::isUsed).orElse(false);
+            if (usedMeanwhile) {
+                revokeAllFor(userId, "race");
+                throw new AuthException(ErrorCode.TOKEN_REUSED, "Please sign in again");
+            }
+            throw new AuthException(ErrorCode.UNAUTHENTICATED, "Sign in to continue");
         }
         return issueInFamily(userId, device, familyId);
     }
@@ -71,6 +79,10 @@ public class TokenService {
     public void logout(String refreshToken) {
         refreshTokens.findByTokenHash(sha256(refreshToken)).ifPresent(row -> {
             UUID userId = row.getUserId();
+            if (row.isUsed()) {
+                revokeAllFor(userId, "reuse");
+                return;
+            }
             refreshTokens.revokeFamily(row.getFamilyId(), clock.instant());
             log.info("{} user={} reason=logout", Events.AUTH_SESSION_REVOKED, userId);
         });

@@ -1,6 +1,7 @@
 package in.gullak.support;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
@@ -86,5 +87,35 @@ public abstract class ApiTest {
             request.addHeader("Authorization", "Bearer " + token);
             return request;
         };
+    }
+
+    protected static final String EXAMPLE_PROFILE = """
+        {"incomePaise":5000000,"savingsPaise":2000000,"paydayRule":"FIXED_DAY","paydayDay":1,
+         "personality":"CHILL","morningTime":"08:00","nightTime":"22:00","timezone":"Asia/Kolkata"}
+        """;
+
+    protected ResultActions putProfile(TestUser user, String json) throws Exception {
+        return mvc.perform(put("/api/v1/me/profile").with(auth(user))
+            .contentType(MediaType.APPLICATION_JSON).content(json));
+    }
+
+    protected String addFixedCost(TestUser user, String name, long paise) throws Exception {
+        String body = mvc.perform(post("/api/v1/me/fixed-costs").with(auth(user))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"" + name + "\",\"amountPaise\":" + paise + "}"))
+            .andExpect(status().isCreated())
+            .andReturn().getResponse().getContentAsString();
+        return JsonPath.read(body, "$.id");
+    }
+
+    /** The spec's example user: ₹50,000 income, ₹15,000 fixed, ₹20,000 savings, payday the 1st. */
+    protected TestUser exampleUser() throws Exception {
+        TestUser user = signIn();
+        addFixedCost(user, "Rent", 1_000_000);
+        addFixedCost(user, "Cook", 200_000);
+        addFixedCost(user, "Maid", 150_000);
+        addFixedCost(user, "Monthly groceries", 150_000);
+        putProfile(user, EXAMPLE_PROFILE).andExpect(status().isOk());
+        return user;
     }
 }

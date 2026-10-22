@@ -4,6 +4,10 @@ spring:
   threads:
     virtual:
       enabled: true
+  jackson:
+    deserialization:
+      # Money is whole paise: 1.5 must be rejected, not truncated to 1.
+      accept-float-as-int: false
   jpa:
     open-in-view: false
     hibernate:

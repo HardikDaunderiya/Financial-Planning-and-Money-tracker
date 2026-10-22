@@ -124,3 +124,16 @@ Changed: server/src/test/java/in/gullak/security/RedTeamPlan01Test.java, docs/re
 Risks: unauthenticated 1 MB+ bodies parsed (RT-01); NUL in device burns a sign-in code with a 500 (RT-03)
 Questions: founder: accept the 24 h targeted-lockout trade-off in the OTP rules (RT-05)?
 ```
+
+## Status after fix round 1
+
+| Finding | Status |
+|---|---|
+| RT-01 | Fixed (1eaeca4) |
+| RT-02 | Fixed (1eaeca4) |
+| RT-03 | Fixed (1eaeca4) |
+| RT-04 | Fixed (1eaeca4); per-email verify limit is 30 per 15 minutes (see task-11 report for why not 10) |
+| RT-05 | Accepted for V1 (founder decision pending) |
+| RT-06 | Fixed (1eaeca4) |
+
+RedTeamPlan01Test: 36/36 passing.

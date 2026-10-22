@@ -41,8 +41,7 @@ class ArchitectureTest {
                     }
                 }
             }
-        })
-        .allowEmptyShould(true);
+        });
 
     @ArchTest
     static final ArchRule noFieldInjection = noFields().should().beAnnotatedWith(Autowired.class);
@@ -50,21 +49,18 @@ class ArchitectureTest {
     @ArchTest
     static final ArchRule controllersDoNotQueryTheDatabase = noClasses()
         .that(CONTROLLERS)
-        .should().dependOnClassesThat().areAssignableTo(JdbcClient.class)
-        .allowEmptyShould(true);
+        .should().dependOnClassesThat().areAssignableTo(JdbcClient.class);
 
     @ArchTest
     static final ArchRule controllersDoNotTouchRepositoriesOrEntities = noClasses()
         .that(CONTROLLERS)
         .should().dependOnClassesThat().haveSimpleNameEndingWith("Repository")
-        .orShould().dependOnClassesThat().areAnnotatedWith(jakarta.persistence.Entity.class)
-        .allowEmptyShould(true);
+        .orShould().dependOnClassesThat().areAnnotatedWith(jakarta.persistence.Entity.class);
 
     @ArchTest
     static final ArchRule entitiesStayInsideTheirFeature = classes()
         .that().areAnnotatedWith(jakarta.persistence.Entity.class)
-        .should().notBePublic()
-        .allowEmptyShould(true);
+        .should().notBePublic();
 
     @ArchTest
     static final ArchRule commonDoesNotDependOnFeatures = noClasses()

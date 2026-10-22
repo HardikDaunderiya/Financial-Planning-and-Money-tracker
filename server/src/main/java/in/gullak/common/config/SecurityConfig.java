@@ -20,6 +20,7 @@ public class SecurityConfig {
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(a -> a
                 .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/auth/**").permitAll()
                 .anyRequest().authenticated())
             .exceptionHandling(e -> e.authenticationEntryPoint(handlers).accessDeniedHandler(handlers));
         return http.build();

@@ -59,7 +59,8 @@ These rules apply to every line of Gullak code. The manager reviews against them
 
 ## 3. Enforcement
 
-- ArchUnit: no empty catch, no broad catch outside allowed packages, controllers return records not entities, repositories are only called from their own feature.
+- `SourceRulesTest`: no empty catch, no broad catch outside `common/error`, parameterised logging only, no `System.out`.
+- ArchUnit: repositories are used only inside their own feature package, entities are not public, no field injection, controllers never touch `JdbcClient`, repositories or entities, `common` never depends on a feature.
 - ESLint: no `console.*` outside `lib/log.ts`, no `any`, no floating promises, exhaustive `switch` on error codes.
 - CI fails on any of the above, on test failures, and on a critical dependency vulnerability.
 - The log redaction test and the error-shape test (`API-X-02`) run in every CI build.

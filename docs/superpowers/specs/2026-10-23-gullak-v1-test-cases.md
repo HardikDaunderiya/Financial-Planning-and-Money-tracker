@@ -199,6 +199,9 @@ One anonymised sample per bank lives in `server/src/test/resources/statements/`.
 | API-AUTH-06 | Verify correct code | POST /auth/otp/verify {email, code} | 200 {accessToken, refreshToken, expiresIn}; code consumed |
 | API-AUTH-07 | Verify wrong code | wrong code | 401 OTP_INVALID; attempts 1 |
 | API-AUTH-08 | Verify locked | 6th wrong attempt | 401 OTP_LOCKED; a new request is needed |
+| API-AUTH-08b | Daily guess cap | 10 wrong guesses across several codes in 24 h, then the right code | 401 OTP_LOCKED "Too many tries today"; works again after 24 h |
+| API-AUTH-08c | Double-tapped request | 5 parallel requests for one email | exactly one live code; the last mailed code verifies |
+| API-AUTH-05b | Spoofed X-Forwarded-For | 31 requests from one socket with different XFF, no trusted proxy | 31st is 429 (real HTTP port, not MockMvc) |
 | API-AUTH-09 | Verify expired | 11 minutes later | 401 OTP_EXPIRED |
 | API-AUTH-10 | Verify reused | correct code twice | second is 401 OTP_INVALID |
 | API-AUTH-11 | Verify for another email | code issued to A, sent with email B | 401 OTP_INVALID |

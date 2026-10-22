@@ -483,10 +483,29 @@ The full list of test cases, positive and negative, with IDs, is in `docs/superp
 | End to end | setup, quick-add, upload and sort, catch-up, goal; web smoke | Maestro, Playwright |
 | Manual | the checklist in `docs/ux-test-findings.md` | before each release |
 
+### 4.10 Logging
+
+The full standard is `docs/engineering-standards.md`, section 1. In short:
+
+- Structured JSON logs with a request ID and the user's UUID in the MDC. One INFO line per request (method, route template, status, duration) written by a filter; one INFO line per business event from a fixed vocabulary (`spend.created`, `import.committed`, `cycle.closed`, `job.finished` and the rest), carrying ids and counts only.
+- WARN for expected failures worth noticing (OTP locked, rate limit, wrong statement password, parse timeout, provider retry). ERROR once per unexpected exception, with a stack trace and an `errorId` that the client also receives.
+- Never logged: amounts, merchant text, raw statement lines, file names, emails, UPI handles, tokens, passwords, OTP codes. A test greps for each.
+- The app logs only through `lib/log.ts`; `console.*` is forbidden by lint. Production logs go to a pluggable reporting sink, off by default, with the same redaction.
+
+### 4.11 Error handling
+
+The full standard is `docs/engineering-standards.md`, section 2. In short:
+
+- One typed exception hierarchy with codes from a single `ErrorCode` enum; one `@RestControllerAdvice` that turns every exception, expected or not, into `{code, message}` with the right status. Unexpected errors return `INTERNAL` with an `errorId` and a generic message.
+- No empty catch blocks and no broad catch outside the error handler, jobs and async boundaries; ArchUnit enforces both. Caught exceptions are handled and logged or rethrown with context, never swallowed.
+- External calls have timeouts and bounded retries; parsers run with a timeout and a memory cap; writes are transactional; jobs fail per user, not per run.
+- The app's API client is the only reader of HTTP responses and produces `ApiError`, `NetworkError` or `UnknownError`; every screen renders loading, empty and error states; error boundaries at the root and per tab; every error code is mapped to a screen or message, and an unmapped one is logged so it gets mapped.
+
 ## 5. How we build it
 
 - The plan is written on the Fable model. Implementation tasks are executed by subagents on the Opus model.
-- Process: the writing-plans skill turns this spec into a task-by-task plan; tasks are executed subagent-driven, each with test-driven development; each task ends with a code review before the next starts.
+- The work is done by a team of seven agents defined in `.claude/agents/` and described in `docs/team.md`: a manager who reviews and accepts every task, a product manager who writes each task's brief and checks the result against this spec, three engineers (backend, phone app, web), a QA engineer who runs and extends the tests, and a red team that attacks the local build like a hostile user. Each task runs through brief, test-first implementation, QA, red team where security is touched, and manager review, in that order.
+- Process: the writing-plans skill turns this spec into a task-by-task plan; tasks are executed subagent-driven, each with test-driven development; each task ends with the manager's review before the next starts.
 - Security is never traded for speed. A task that would weaken 4.7 stops and asks.
 - Suggested order: M0 repo, CI and skeletons; M1 auth, profile, budget engine, Home; M2 quick-add, spend detail, offline; M3 statements, matching, swipe-to-sort; M4 goals and catch-up; M5 game, Gullak, report card; M6 insights and subscriptions; M7 Me, export, deletion; M8 notifications and jobs; M9 web build and release. The plan may reorder within these.
 - Definition of done for a task: tests written first and passing, the screen or endpoint matches this spec and `design.md`, review comments addressed, no new dependency without a reason in the PR.

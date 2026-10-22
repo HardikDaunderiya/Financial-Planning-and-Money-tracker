@@ -504,3 +504,37 @@ One anonymised sample per bank lives in `server/src/test/resources/statements/`.
 ## 11. Manual checklist
 
 The 39-step prototype checklist in `docs/ux-test-findings.md`, run on a real Android phone and an iPhone before each release, plus: notifications arrive at the set times, quiet hours hold, the share image looks right in Instagram stories, and the app survives a phone restart mid-sync.
+
+## 12. Logging and error handling
+
+Standard: `docs/engineering-standards.md`.
+
+| ID | Case | Expected |
+|---|---|---|
+| LOG-01 | Request line | one INFO line per request with method, route template, status, duration, requestId; none from controllers |
+| LOG-02 | Request ID round trip | `X-Request-Id` sent in is echoed in the response header and the log; absent, one is generated |
+| LOG-03 | Business events | creating a spend, committing an import, closing a cycle and finishing a job each log exactly one event from the vocabulary, with ids and counts only |
+| LOG-04 | Levels | OTP lock, rate limit, wrong password and parse timeout log at WARN; an injected unexpected exception logs once at ERROR with a stack and an errorId equal to the one in the response |
+| LOG-05 | Redaction | after running the API suite, the captured logs contain no amount from the fixtures, no merchant text, no email, no token, no OTP, no password, no file name |
+| LOG-06 | Parameterised only | a static check fails on string concatenation inside a log call |
+| LOG-07 | Job logging | a job over 3 users where user 2 throws: `job.started`, one `job.failed` for user 2, `job.finished` with processed 2 failed 1 |
+| LOG-08 | App logger | ESLint fails on `console.log` outside `lib/log.ts`; in production builds `debug` is dropped and `info` reaches the reporting sink interface |
+| LOG-09 | App redaction | the reporting sink never receives an amount, merchant or token in any field or breadcrumb |
+| ERR-01 | Error shape everywhere | every 4xx and 5xx in the suite has `{code, message}`; 5xx has `errorId`; no stack trace or class name in any body |
+| ERR-02 | Validation fields | a request with two bad fields returns 400 VALIDATION with both field names |
+| ERR-03 | Malformed JSON | 400 VALIDATION, logged at INFO, not ERROR |
+| ERR-04 | Unexpected exception | a service throwing `IllegalStateException` → 500 INTERNAL, generic message, one ERROR log |
+| ERR-05 | No empty catch | ArchUnit fails on an empty catch block anywhere in `server/` |
+| ERR-06 | No broad catch | ArchUnit fails on `catch (Exception` or `catch (Throwable` outside the error handler, job runner and async packages |
+| ERR-07 | Transaction rollback | a write that throws after inserting a row leaves no row |
+| ERR-08 | External call timeout | email provider stub that hangs: request completes, WARN logged, retry queued, no user-facing failure |
+| ERR-09 | External call gives up | provider fails 3 times: WARN each, then queued for later, job records it |
+| ERR-10 | Parser timeout releases the thread | after RD-14 the executor has no stuck thread; a second upload works |
+| ERR-11 | Not found is thrown | a repository returning empty for the caller's own id produces 404 through the handler, never a null-pointer 500 |
+| ERR-12 | API client mapping | app: 404 → ApiError NOT_FOUND; network drop → NetworkError; HTML error page → UnknownError; never a raw exception reaches a screen |
+| ERR-13 | Every screen's error state | a failing query on each screen renders the error state with Retry; Retry refetches |
+| ERR-14 | Optimistic rollback | delete fails with 500: the row returns and a message shows |
+| ERR-15 | Error boundary | a component that throws during render shows the fallback with Retry, and the error is reported |
+| ERR-16 | Unmapped code | server returns a new code: generic message shown, WARN logged with the code |
+| ERR-17 | Offline queue on 4xx | a queued spend rejected with 400 is not retried; it is shown on Home as failed with the reason |
+| ERR-18 | Unhandled rejection | a rejected promise with no handler is caught globally and logged, and the app keeps running |

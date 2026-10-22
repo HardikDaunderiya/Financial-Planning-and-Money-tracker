@@ -42,9 +42,9 @@ Conventions:
 | BUD-26 | Setup impossible | income ₹30,000, fixed ₹15,000, savings ₹20,000 | NOT_POSSIBLE, spendable would be negative |
 | BUD-27 | Rounding is always down | pool ₹1,000, 3 days | ₹333, never ₹334 |
 | BUD-28 | Boundary at midnight IST | spend at 23:59:59 IST and 00:00:01 IST | first counts today, second counts tomorrow, regardless of server zone |
-| BUD-29 | Whole-rupee daily budget | pool ₹1,000.50 over 3 days | budget ₹333 (33,300 paise); the 150 paise stay in the pool |
 | BUD-29 | Transaction in a closed cycle | spend dated 20 Sep added on 23 Oct | September's history changes; today's budget does not |
 | BUD-30 | Daily budget is not stored | inspect schema | no column holds a daily budget; the value comes from a query |
+| BUD-31 | Whole-rupee daily budget | pool ₹1,000.50 over 3 days | budget ₹333 (33,300 paise); the 150 paise stay in the pool |
 
 ## 2. Goals and catch-up (unit)
 

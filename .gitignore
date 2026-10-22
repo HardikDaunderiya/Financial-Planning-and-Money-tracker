@@ -1,0 +1,9 @@
+.superpowers/
+node_modules/
+.expo/
+build/
+.gradle/
+*.log
+.env
+.env.*
+.DS_Store

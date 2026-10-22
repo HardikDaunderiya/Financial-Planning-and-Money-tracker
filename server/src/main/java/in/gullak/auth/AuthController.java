@@ -23,6 +23,8 @@ class AuthController {
         @NotBlank @Pattern(regexp = "\\d{6}") String code,
         @Size(max = 60) String device) {}
 
+    record RefreshRequest(@NotBlank @Size(max = 100) String refreshToken) {}
+
     private final OtpService otp;
     private final TokenService tokens;
 
@@ -40,5 +42,16 @@ class AuthController {
     @PostMapping("/otp/verify")
     TokenPair verify(@Valid @RequestBody OtpVerify body, HttpServletRequest http) {
         return tokens.issue(otp.verify(body.email(), body.code(), http.getRemoteAddr()), body.device());
+    }
+
+    @PostMapping("/refresh")
+    TokenPair refresh(@Valid @RequestBody RefreshRequest body) {
+        return tokens.refresh(body.refreshToken());
+    }
+
+    @PostMapping("/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void logout(@Valid @RequestBody RefreshRequest body) {
+        tokens.logout(body.refreshToken());
     }
 }

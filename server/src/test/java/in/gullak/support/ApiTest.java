@@ -1,7 +1,9 @@
 package in.gullak.support;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.jayway.jsonpath.JsonPath;
 import in.gullak.TestcontainersConfiguration;
 import in.gullak.auth.InMemoryOtpMailer;
 import java.util.UUID;
@@ -59,5 +61,30 @@ public abstract class ApiTest {
         return mvc.perform(post("/api/v1/auth/otp/verify").with(ip)
             .contentType(MediaType.APPLICATION_JSON)
             .content("{\"email\":\"" + email + "\",\"code\":\"" + code + "\",\"device\":\"test\"}"));
+    }
+
+    protected TestUser signIn() throws Exception {
+        return signIn(uniqueEmail());
+    }
+
+    protected TestUser signIn(String email) throws Exception {
+        RequestPostProcessor ip = freshIp();
+        requestCode(email, ip).andExpect(status().isNoContent());
+        String body = verifyCode(email, mailer.lastCodeFor(email), ip)
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+        UUID id = jdbc.sql("select id from users where email = ?").param(email).query(UUID.class).single();
+        return new TestUser(id, email, JsonPath.read(body, "$.accessToken"), JsonPath.read(body, "$.refreshToken"));
+    }
+
+    protected static RequestPostProcessor auth(TestUser user) {
+        return bearer(user.accessToken());
+    }
+
+    protected static RequestPostProcessor bearer(String token) {
+        return request -> {
+            request.addHeader("Authorization", "Bearer " + token);
+            return request;
+        };
     }
 }

@@ -1,5 +1,6 @@
 package in.gullak.common.config;
 
+import in.gullak.common.error.JsonAuthHandlers;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -12,14 +13,15 @@ import org.springframework.security.web.SecurityFilterChain;
 @EnableWebSecurity
 public class SecurityConfig {
     @Bean
-    SecurityFilterChain api(HttpSecurity http) throws Exception {
+    SecurityFilterChain api(HttpSecurity http, JsonAuthHandlers handlers) throws Exception {
         http.csrf(c -> c.disable())
             .httpBasic(b -> b.disable())
             .formLogin(f -> f.disable())
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(a -> a
                 .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
-                .anyRequest().authenticated());
+                .anyRequest().authenticated())
+            .exceptionHandling(e -> e.authenticationEntryPoint(handlers).accessDeniedHandler(handlers));
         return http.build();
     }
 }

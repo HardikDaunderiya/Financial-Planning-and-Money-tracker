@@ -17,7 +17,12 @@ spring:
       max-file-size: 10MB
       max-request-size: 11MB
 server:
-  forward-headers-strategy: framework
+  # Only the proxies listed here may set the client address through X-Forwarded-For.
+  # Empty trusts no proxy; production sets the load balancer's address as a regex.
+  forward-headers-strategy: native
+  tomcat:
+    remoteip:
+      internal-proxies: ${GULLAK_TRUSTED_PROXIES:}
   error:
     include-stacktrace: never
     include-message: never

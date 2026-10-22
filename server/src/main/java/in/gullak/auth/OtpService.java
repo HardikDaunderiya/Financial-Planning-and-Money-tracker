@@ -18,6 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class OtpService {
     static final int MAX_ATTEMPTS = 5;
+    static final int MAX_DAILY_FAILURES = 10;
+    private static final String INVALID = "That code didn't work. Check it or request a new one.";
     private static final Logger log = LoggerFactory.getLogger(OtpService.class);
     private static final Duration WINDOW = Duration.ofMinutes(10);
 
@@ -44,12 +46,13 @@ public class OtpService {
     @Transactional
     public void request(String rawEmail, String ip) {
         String email = Emails.normalize(rawEmail);
-        limiter.check("otp-request-email:" + email, 5, WINDOW);
         limiter.check("otp-request-ip:" + ip, 30, WINDOW);
+        limiter.check("otp-request-email:" + email, 5, WINDOW);
         String code = String.format("%06d", random.nextInt(1_000_000));
         Instant now = clock.instant();
+        codes.lockEmail(email);
         codes.retireLiveCodes(email, now);
-        codes.save(new OtpCodeEntity(email, hasher.hash(email, code), now.plus(props.otpTtl())));
+        codes.save(new OtpCodeEntity(email, hasher.hash(email, code), now, now.plus(props.otpTtl())));
         mailer.sendOtp(email, code);
         log.info(Events.AUTH_OTP_REQUESTED);
     }
@@ -59,18 +62,24 @@ public class OtpService {
         String email = Emails.normalize(rawEmail);
         limiter.check("otp-verify-ip:" + ip, 30, WINDOW);
         OtpCodeEntity otp = codes.findFirstByEmailAndConsumedAtIsNull(email)
-            .orElseThrow(() -> new AuthException(ErrorCode.OTP_INVALID, "That code didn't work. Request a new one."));
+            .orElseThrow(() -> new AuthException(ErrorCode.OTP_INVALID, INVALID));
+
+        Instant now = clock.instant();
+        // Counted in the database so restarts and extra instances cannot reset it. The row lock above
+        // serialises guesses on the live code, and retired codes no longer change.
+        if (codes.failedAttemptsSince(email, now.minus(Duration.ofHours(24))) >= MAX_DAILY_FAILURES) {
+            throw new AuthException(ErrorCode.OTP_LOCKED, "Too many tries today. Try again tomorrow.");
+        }
 
         if (otp.getAttempts() >= MAX_ATTEMPTS) {
             throw new AuthException(ErrorCode.OTP_LOCKED, "Too many tries. Request a new code.");
         }
-        Instant now = clock.instant();
         if (!now.isBefore(otp.getExpiresAt())) {
             throw new AuthException(ErrorCode.OTP_EXPIRED, "That code has expired. Request a new one.");
         }
         if (!hasher.matches(email, code, otp.getCodeHash())) {
             otp.recordFailedAttempt();
-            throw new AuthException(ErrorCode.OTP_INVALID, "That code didn't work. Check it and try again.");
+            throw new AuthException(ErrorCode.OTP_INVALID, INVALID);
         }
         otp.consume(now);
         users.insertIfAbsent(UUID.randomUUID(), email);

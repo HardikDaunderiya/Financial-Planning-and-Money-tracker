@@ -28,12 +28,16 @@ class OtpCodeEntity {
     @Column(name = "consumed_at")
     private Instant consumedAt;
 
+    @Column(name = "created_at", nullable = false)
+    private Instant createdAt;
+
     protected OtpCodeEntity() {}
 
-    OtpCodeEntity(String email, String codeHash, Instant expiresAt) {
+    OtpCodeEntity(String email, String codeHash, Instant createdAt, Instant expiresAt) {
         this.id = UUID.randomUUID();
         this.email = email;
         this.codeHash = codeHash;
+        this.createdAt = createdAt;
         this.expiresAt = expiresAt;
     }
 

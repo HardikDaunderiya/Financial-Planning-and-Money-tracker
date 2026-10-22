@@ -7,7 +7,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import in.gullak.support.ApiTest;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.test.system.CapturedOutput;
@@ -169,6 +174,82 @@ class OtpApiTest extends ApiTest {
         String code = mailer.lastCodeFor(email);
         verifyCode(email, code, ip);
         assertThat(out.getOut()).doesNotContain(email).doesNotContain(code);
+    }
+
+    @Test
+    void ipRejectionDoesNotSpendTheEmailBudget() throws Exception { // Review fix 4
+        RequestPostProcessor noisy = freshIp();
+        for (int i = 0; i < 30; i++) {
+            requestCode(uniqueEmail(), noisy).andExpect(status().isNoContent());
+        }
+        String victim = uniqueEmail();
+        for (int i = 0; i < 5; i++) {
+            requestCode(victim, noisy).andExpect(status().isTooManyRequests());
+        }
+        for (int i = 0; i < 5; i++) {
+            requestCode(victim, freshIp()).andExpect(status().isNoContent());
+        }
+    }
+
+    @Test
+    void parallelRequestsLeaveOneLiveCode() throws Exception { // Review fix 2
+        String email = uniqueEmail();
+        ExecutorService pool = Executors.newFixedThreadPool(5);
+        try {
+            List<Future<Integer>> results = new ArrayList<>();
+            for (int i = 0; i < 5; i++) {
+                RequestPostProcessor ip = freshIp();
+                results.add(pool.submit(() -> requestCode(email, ip).andReturn().getResponse().getStatus()));
+            }
+            for (Future<Integer> result : results) {
+                assertThat(result.get()).isEqualTo(204);
+            }
+        } finally {
+            pool.shutdown();
+        }
+        Integer live = jdbc.sql("select count(*) from otp_codes where email = ? and consumed_at is null")
+            .param(email).query(Integer.class).single();
+        assertThat(live).isEqualTo(1);
+        verifyCode(email, mailer.lastCodeFor(email), freshIp()).andExpect(status().isOk());
+    }
+
+    @Test
+    void tenWrongCodesInADayLockTheEmailUntilTomorrow(CapturedOutput out) throws Exception { // Review fix 3
+        String email = uniqueEmail();
+        RequestPostProcessor ip = freshIp();
+        for (int guesses : new int[] {4, 4, 2}) {
+            requestCode(email, ip).andExpect(status().isNoContent());
+            String code = mailer.lastCodeFor(email);
+            for (int i = 0; i < guesses; i++) {
+                verifyCode(email, wrongCode(code), ip).andExpect(jsonPath("$.code").value("OTP_INVALID"));
+            }
+            clock.advance(Duration.ofMinutes(4));
+        }
+        requestCode(email, ip).andExpect(status().isNoContent());
+        verifyCode(email, mailer.lastCodeFor(email), ip)
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("OTP_LOCKED"))
+            .andExpect(jsonPath("$.message").value("Too many tries today. Try again tomorrow."));
+        assertThat(out.getOut()).contains("error.expected code=OTP_LOCKED");
+
+        clock.advance(Duration.ofHours(25));
+        RequestPostProcessor later = freshIp();
+        requestCode(email, later).andExpect(status().isNoContent());
+        verifyCode(email, mailer.lastCodeFor(email), later).andExpect(status().isOk());
+    }
+
+    @Test
+    void noLiveCodeAndWrongCodeSayTheSameThing() throws Exception { // Review fix 5
+        String message = "That code didn't work. Check it or request a new one.";
+        verifyCode(uniqueEmail(), "123456", freshIp())
+            .andExpect(jsonPath("$.code").value("OTP_INVALID"))
+            .andExpect(jsonPath("$.message").value(message));
+        String email = uniqueEmail();
+        RequestPostProcessor ip = freshIp();
+        requestCode(email, ip);
+        verifyCode(email, wrongCode(mailer.lastCodeFor(email)), ip)
+            .andExpect(jsonPath("$.code").value("OTP_INVALID"))
+            .andExpect(jsonPath("$.message").value(message));
     }
 
     private static String wrongCode(String code) {

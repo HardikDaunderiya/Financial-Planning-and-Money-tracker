@@ -3,6 +3,7 @@ module.exports = {
   projects: [
     {
       displayName: "native",
+      globalSetup: "<rootDir>/jest.global-setup.js",
       preset: "jest-expo/ios",
       resolver: require.resolve("react-native-reanimated/jest/resolver"),
       setupFilesAfterEnv: ["<rootDir>/jest.setup.ts"],

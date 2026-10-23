@@ -13,6 +13,8 @@ export function formatRupees(paise: number): string {
 export function parseRupeesToPaise(text: string): number {
   const digits = text.split(".")[0]?.replace(/\D/g, "") ?? "";
   if (digits === "") return 0;
-  const capped = digits.slice(0, 7);
+  const trimmed = digits.replace(/^0+/, "");
+  if (trimmed === "") return 0;
+  const capped = trimmed.slice(0, 7);
   return Number.parseInt(capped, 10) * 100;
 }

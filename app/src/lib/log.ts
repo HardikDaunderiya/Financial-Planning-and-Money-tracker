@@ -3,29 +3,60 @@ import { reporting, type ReportingSink } from "./reporting";
 
 type ConsoleLike = Pick<Console, "debug" | "info" | "warn" | "error">;
 
-const FORBIDDEN_KEYS =
-  /(amount|paise|merchant|email|token|password|otp|^code$|secret|raw|upi|note$|name$|total|budget|spent|left)/i;
+const ALLOWED_KEYS = new Set([
+  "route",
+  "method",
+  "status",
+  "ms",
+  "count",
+  "attempt",
+  "id",
+  "errorCode",
+  "reason",
+  "key",
+  "granted",
+  "fatal",
+  "kind",
+  "screen",
+  "message",
+]);
+const ERROR_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
 const FORBIDDEN_VALUES = [
   /[^\s@]+@[^\s@]+\.[^\s@]+/, // email
   /eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*/, // JWT
-  /\b\d{6}\b/, // OTP code
-  /[₹]\s?\d/, // a rupee amount
+  /\d{6}/, // a run of 6 digits (OTP code)
+  /(₹|\brs\b\.?|\binr\b)\s*\d/i, // a money amount
 ];
 
-/** Drops any field whose key or value could identify money, a person or a secret (LOG-09). */
+/**
+ * Allow-list redaction (LOG-09): only known keys with string, number or boolean values pass,
+ * and strings that look like an email, a token, a code or an amount are dropped. Never throws.
+ */
 export function redact(data: Record<string, unknown> | undefined): Record<string, unknown> {
-  if (!data) return {};
-  const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(data)) {
-    if (FORBIDDEN_KEYS.test(key)) continue;
-    if (typeof value === "string" && FORBIDDEN_VALUES.some((re) => re.test(value))) continue;
-    if (value && typeof value === "object" && !Array.isArray(value)) {
-      out[key] = redact(value as Record<string, unknown>);
-      continue;
+  const out: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+  if (!data) return out;
+  try {
+    for (const key of Object.keys(data)) {
+      if (key === "__proto__" || !ALLOWED_KEYS.has(key)) continue;
+      try {
+        const value = data[key];
+        if (typeof value === "number" || typeof value === "boolean") {
+          out[key] = value;
+        } else if (typeof value === "string") {
+          if (key === "errorCode") {
+            out[key] = ERROR_CODE.test(value) ? value : "invalid";
+          } else if (!FORBIDDEN_VALUES.some((re) => re.test(value))) {
+            out[key] = value;
+          }
+        }
+      } catch {
+        // a throwing getter: drop the field
+      }
     }
-    out[key] = value;
+  } catch {
+    // a hostile object: return what we have
   }
-  return out;
+  return { ...out };
 }
 
 export type Logger = {
@@ -46,13 +77,17 @@ export function createLogger(opts: {
     event: string,
     data?: Record<string, unknown>,
   ) => {
-    const safe = redact(data);
-    if (opts.dev) {
-      opts.console[level](event, safe);
-      return;
+    try {
+      const safe = redact(data);
+      if (opts.dev) {
+        opts.console[level](event, safe);
+        return;
+      }
+      if (level === "debug") return;
+      sinkOf()?.report(level, event, safe);
+    } catch {
+      // Logging must never break the app.
     }
-    if (level === "debug") return;
-    sinkOf()?.report(level, event, safe);
   };
   return {
     debug: (e, d) => emit("debug", e, d),

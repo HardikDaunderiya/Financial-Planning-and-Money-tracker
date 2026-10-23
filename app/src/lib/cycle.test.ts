@@ -38,6 +38,23 @@ describe("cycle maths (client copy of the server rules)", () => {
     expect(payday("2026-12", { rule: "LAST_WORKING_DAY" })).toBe("2026-12-31");
   });
 
+  it("last working day across December to January", () => {
+    expect(payday("2026-12", { rule: "LAST_WORKING_DAY" })).toBe("2026-12-31");
+    expect(cycleContaining("2027-01-10", { rule: "LAST_WORKING_DAY" })).toEqual({
+      start: "2026-12-31",
+      end: "2027-01-28",
+      days: 29,
+    });
+  });
+
+  it("fixed day 1 in February 2028 has 29 days", () => {
+    expect(cycleContaining("2028-02-10", { rule: "FIXED_DAY", day: 1 })).toEqual({
+      start: "2028-02-01",
+      end: "2028-02-29",
+      days: 29,
+    });
+  });
+
   it("a date on payday starts a new cycle; the day before belongs to the old one", () => {
     expect(cycleContaining("2026-11-01", { rule: "FIXED_DAY", day: 1 }).start).toBe("2026-11-01");
     expect(cycleContaining("2026-10-31", { rule: "FIXED_DAY", day: 1 }).start).toBe("2026-10-01");

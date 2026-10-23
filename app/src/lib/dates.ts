@@ -74,17 +74,20 @@ export function greeting(now: Date = new Date()): string {
   return "Good evening";
 }
 
-/** "5 minutes ago", "2 hours ago", "yesterday", "3 days ago". */
+/** "5 minutes ago", "2 hours ago", "yesterday" (the previous IST calendar date), "3 days ago". */
 export function relativeTime(at: number, now: number = Date.now()): string {
-  const s = Math.max(0, Math.round((now - at) / 1000));
+  const s = Math.max(0, Math.floor((now - at) / 1000));
   if (s < 60) return "just now";
-  const m = Math.round(s / 60);
+  const m = Math.floor(s / 60);
   if (m < 60) return `${m} minute${m === 1 ? "" : "s"} ago`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${h} hour${h === 1 ? "" : "s"} ago`;
-  const d = Math.round(h / 24);
-  if (d === 1) return "yesterday";
-  return `${d} days ago`;
+  const dateAt = todayIst(new Date(at));
+  const dateNow = todayIst(new Date(now));
+  if (dateAt === dateNow) {
+    const h = Math.floor(m / 60);
+    return `${h} hour${h === 1 ? "" : "s"} ago`;
+  }
+  if (dateAt === addDays(dateNow, -1)) return "yesterday";
+  return `${daysInclusive(dateAt, dateNow) - 1} days ago`;
 }
 
 /** Days from a to b inclusive, both "YYYY-MM-DD". */

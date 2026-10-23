@@ -28,6 +28,10 @@ describe("parseRupeesToPaise", () => {
     expect(parseRupeesToPaise(text)).toBe(paise);
   });
 
+  it("strips leading zeros before the cap", () => {
+    expect(parseRupeesToPaise("0000000123")).toBe(12300);
+  });
+
   it("caps at 7 digits of rupees", () => {
     expect(parseRupeesToPaise("123456789")).toBe(1234567_00);
   });

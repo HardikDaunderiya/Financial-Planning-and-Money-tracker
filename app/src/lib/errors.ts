@@ -24,6 +24,9 @@ const messages: Record<ErrorCode, string> = {
   INTERNAL: GENERIC,
 };
 
+const warned = new Set<string>();
+const MAX_WARNED = 100;
+
 /** The message for a code; an unmapped code logs a WARN so it gets mapped (ERR-16). */
 export function messageFor(
   code: string,
@@ -32,6 +35,9 @@ export function messageFor(
   if (isErrorCode(code)) {
     return messages[code];
   }
-  deps.warn("error.unmapped", { code });
+  if (!warned.has(code) && warned.size < MAX_WARNED) {
+    warned.add(code);
+    deps.warn("error.unmapped", { errorCode: code });
+  }
   return GENERIC;
 }

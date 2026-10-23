@@ -234,6 +234,19 @@ class TokenApiTest extends ApiTest {
         refresh(newPhone).andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void logoutWithAUsedTokenPastItsExpiryRevokesNothing() throws Exception { // M-1, API-AUTH-13b
+        TestUser phone = signIn();
+        refresh(phone.refreshToken()).andExpect(status().isOk()); // phone's first token is now used
+        TestUser laptop = signIn(phone.email());
+        clock.advance(Duration.ofDays(29));
+        String laptopNow = JsonPath.read(refresh(laptop.refreshToken()).andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString(), "$.refreshToken");
+        clock.advance(Duration.ofDays(2)); // phone's first token is now past its 30 days
+        logout(phone.refreshToken()).andExpect(status().isNoContent());
+        refresh(laptopNow).andExpect(status().isOk());
+    }
+
     private ResultActions refresh(String token, RequestPostProcessor extra)
             throws Exception {
         return mvc.perform(post("/api/v1/auth/refresh").with(extra).contentType(MediaType.APPLICATION_JSON)

@@ -79,6 +79,9 @@ public class TokenService {
     public void logout(String refreshToken) {
         refreshTokens.findByTokenHash(sha256(refreshToken)).ifPresent(row -> {
             UUID userId = row.getUserId();
+            if (!clock.instant().isBefore(row.getExpiresAt())) {
+                return; // An expired token signs nothing out, so an old one can never revoke every session.
+            }
             if (row.isUsed()) {
                 revokeAllFor(userId, "reuse");
                 return;

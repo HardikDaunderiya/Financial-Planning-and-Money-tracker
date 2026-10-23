@@ -34,6 +34,8 @@ server:
 management:
   endpoints:
     web:
+      discovery:
+        enabled: false
       exposure:
         include: health
   endpoint:
@@ -51,3 +53,5 @@ gullak:
     access-ttl: 15m
     refresh-ttl: 30d
     otp-ttl: 10m
+    verify-email-limit: 30
+    verify-email-window: 15m

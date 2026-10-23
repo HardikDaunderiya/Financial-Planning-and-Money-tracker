@@ -48,7 +48,8 @@ class RedTeamPlan01Test extends ApiTest {
         mvc.perform(post("/api/v1/auth/otp/request").with(freshIp())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"" + uniqueEmail() + "\",\"pad\":\"" + padding + "\"}"))
-            .andExpect(status().is(413));
+            .andExpect(status().is(413))
+            .andExpect(jsonPath("$.code").value("TOO_LARGE"));
     }
 
     /** RT-01 (Medium) API-X-08: same on an authenticated route. */
@@ -70,7 +71,8 @@ class RedTeamPlan01Test extends ApiTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"name\":\"Rent\",\"amountPaise\":\"100000\"}"))
             .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.code").value("VALIDATION"));
+            .andExpect(jsonPath("$.code").value("VALIDATION"))
+            .andExpect(jsonPath("$.fields[0].field").value("amountPaise"));
     }
 
     /** RT-02 (Medium) API-X-09: same for profile money fields. */
@@ -79,7 +81,8 @@ class RedTeamPlan01Test extends ApiTest {
         TestUser a = signIn();
         putProfile(a, EXAMPLE_PROFILE.replace("5000000", "\"5000000\""))
             .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.code").value("VALIDATION"));
+            .andExpect(jsonPath("$.code").value("VALIDATION"))
+            .andExpect(jsonPath("$.fields[0].field").value("incomePaise"));
     }
 
     /** RT-02 (Medium) API-X-09: same for PATCH. */
@@ -90,7 +93,9 @@ class RedTeamPlan01Test extends ApiTest {
         mvc.perform(patch("/api/v1/me/fixed-costs/" + id).with(auth(a))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"amountPaise\":\"200000\"}"))
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("VALIDATION"))
+            .andExpect(jsonPath("$.fields[0].field").value("amountPaise"));
     }
 
     /** RT-03 (Medium) Input limits / ERR: a NUL character in a text field must be a 400, not a 500. */
@@ -126,11 +131,13 @@ class RedTeamPlan01Test extends ApiTest {
         RequestPostProcessor ip = freshIp();
         requestCode(email, ip).andExpect(status().isNoContent());
         String code = mailer.lastCodeFor(email);
-        int status = mvc.perform(post("/api/v1/auth/otp/verify").with(ip)
+        mvc.perform(post("/api/v1/auth/otp/verify").with(ip)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"" + email + "\",\"code\":\"" + code + "\",\"device\":\"ph\\u0000one\"}"))
-            .andReturn().getResponse().getStatus();
-        assertThat(status).as("verify with NUL in device").isIn(200, 400);
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("VALIDATION"));
+        // the code was not consumed: the same code still signs in with a valid device
+        verifyCode(email, code, ip).andExpect(status().isOk());
     }
 
     /**

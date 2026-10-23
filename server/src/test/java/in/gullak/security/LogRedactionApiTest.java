@@ -111,6 +111,7 @@ class LogRedactionApiTest extends ApiTest {
             .doesNotContain(newAccess)
             .doesNotContain(newRefresh)
             .doesNotContain(NAME_1).doesNotContain(NAME_2).doesNotContain(NAME_3).doesNotContain("Wombat")
+            .doesNotContain("Temp")
             .doesNotContain(String.valueOf(INCOME)).doesNotContain(String.valueOf(SAVINGS))
             .doesNotContain(String.valueOf(COST_1)).doesNotContain(String.valueOf(COST_2))
             .doesNotContain(String.valueOf(COST_PATCHED)).doesNotContain(String.valueOf(BAD_AMOUNT))

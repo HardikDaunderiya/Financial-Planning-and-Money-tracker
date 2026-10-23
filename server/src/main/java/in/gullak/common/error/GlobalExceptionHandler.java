@@ -1,8 +1,12 @@
 package in.gullak.common.error;
 
 import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
 import java.util.UUID;
 import org.slf4j.Logger;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.exc.MismatchedInputException;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -63,6 +67,13 @@ public class GlobalExceptionHandler {
             if (t instanceof BodyTooLargeException) {
                 return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
                     .body(ErrorBody.of(ErrorCode.TOO_LARGE, "That request is too big"));
+            }
+            if (t instanceof MismatchedInputException mismatch) {
+                String field = mismatch.getPath().stream()
+                    .map(JacksonException.Reference::getPropertyName)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.joining("."));
+                return badRequest(field.isEmpty() ? null : List.of(new ErrorBody.FieldProblem(field, "has the wrong type")));
             }
             if (t.getCause() == t) {
                 break;

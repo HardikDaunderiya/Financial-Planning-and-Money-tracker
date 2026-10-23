@@ -1,0 +1,4 @@
+gullak:
+  auth:
+    jwt-secret: test-only-jwt-secret-0123456789abcdef0123456789
+    otp-pepper: test-only-otp-pepper-0123456789abcdef0123456789

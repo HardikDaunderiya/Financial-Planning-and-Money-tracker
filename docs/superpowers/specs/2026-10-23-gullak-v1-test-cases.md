@@ -31,7 +31,7 @@ Conventions:
 | BUD-15 | Zero savings | savings ₹0 | spendable ₹35,000 |
 | BUD-16 | Fixed cost edited mid-cycle | rent ₹10,000 to ₹12,000 on day 10 | spendable ₹13,000 from day 10; daily budget recomputed |
 | BUD-17 | Income edited mid-cycle | income to ₹55,000 | spendable ₹20,000 at once |
-| BUD-18 | Payday edited mid-cycle | payday 1 to 7 on day 10 | current cycle unchanged; next cycle starts 7 Nov |
+| BUD-18 | Payday edited mid-cycle | payday 1 to 7 on day 10 | current cycle unchanged (1 to 31 Oct); a bridge cycle 1 to 6 Nov; then 7 Nov to 6 Dec |
 | BUD-19 | Deleted spend | delete a ₹150 spend | excluded from spent at once |
 | BUD-20 | Day with no spends | no transactions today | spent ₹0, left equals budget |
 | BUD-21 | Last day of cycle | 1 day left, ₹900 in pool | budget ₹900 |
@@ -44,6 +44,8 @@ Conventions:
 | BUD-28 | Boundary at midnight IST | spend at 23:59:59 IST and 00:00:01 IST | first counts today, second counts tomorrow, regardless of server zone |
 | BUD-29 | Transaction in a closed cycle | spend dated 20 Sep added on 23 Oct | September's history changes; today's budget does not |
 | BUD-30 | Daily budget is not stored | inspect schema | no column holds a daily budget; the value comes from a query |
+| BUD-31 | Whole-rupee daily budget | pool ₹1,000.50 over 3 days | budget ₹333 (33,300 paise); the 150 paise stay in the pool |
+| BUD-32 | First cycle is pro-rated | spendable ₹15,000, setup on 23 Oct, payday 1st (cycle 1–31 Oct, 9 days left) | first-cycle pool ₹4,354; budget ₹483 a day; a "money left" answer of ₹6,000 gives ₹666 a day |
 
 ## 2. Goals and catch-up (unit)
 
@@ -199,11 +201,16 @@ One anonymised sample per bank lives in `server/src/test/resources/statements/`.
 | API-AUTH-06 | Verify correct code | POST /auth/otp/verify {email, code} | 200 {accessToken, refreshToken, expiresIn}; code consumed |
 | API-AUTH-07 | Verify wrong code | wrong code | 401 OTP_INVALID; attempts 1 |
 | API-AUTH-08 | Verify locked | 6th wrong attempt | 401 OTP_LOCKED; a new request is needed |
+| API-AUTH-08b | Daily guess cap | 10 wrong guesses across several codes in 24 h, then the right code | 401 OTP_LOCKED "Too many tries today"; works again after 24 h |
+| API-AUTH-08c | Double-tapped request | 5 parallel requests for one email | exactly one live code; the last mailed code verifies |
+| API-AUTH-05b | Spoofed X-Forwarded-For | 31 requests from one socket with different XFF, no trusted proxy | 31st is 429 (real HTTP port, not MockMvc) |
 | API-AUTH-09 | Verify expired | 11 minutes later | 401 OTP_EXPIRED |
 | API-AUTH-10 | Verify reused | correct code twice | second is 401 OTP_INVALID |
 | API-AUTH-11 | Verify for another email | code issued to A, sent with email B | 401 OTP_INVALID |
 | API-AUTH-12 | Refresh | POST /auth/refresh | 200 new pair; old token used_at set |
 | API-AUTH-13 | Refresh reuse | the old token again | 401 TOKEN_REUSED; every refresh token for the user revoked |
+| API-AUTH-13b | Stale token is not a kill switch | refresh with a logged-out token, or a used token after its expiry | 401 (UNAUTHENTICATED or TOKEN_EXPIRED); the user's other sessions keep working |
+| API-AUTH-17b | Logout after the access token expired | POST /auth/logout with an expired bearer header | 204; refresh token revoked |
 | API-AUTH-14 | Refresh expired | 31 days old | 401 TOKEN_EXPIRED |
 | API-AUTH-15 | Refresh after logout | | 401 |
 | API-AUTH-16 | Web refresh needs header | cookie present, no X-Requested-With | 403 CSRF |
@@ -227,7 +234,7 @@ One anonymised sample per bank lives in `server/src/test/resources/statements/`.
 | API-PRO-07 | Bad time | morning_time "25:00" | 400 |
 | API-PRO-08 | Timezone not supported in V1 | "Europe/London" | 400 |
 | API-PRO-09 | Savings exceed income minus fixed | savings ₹36,000 | 422 NOT_POSSIBLE with the maximum allowed |
-| API-PRO-10 | Payday change timing | payday 1 to 7 | 200; current cycle end unchanged; next starts 7 Nov |
+| API-PRO-10 | Payday change timing | payday 1 to 7 | 200; current cycle end unchanged; bridge cycle 1 to 6 Nov; normal cycle from 7 Nov |
 | API-PRO-11 | Before setup | GET /budget/today for a user with no profile | 409 SETUP_INCOMPLETE |
 | API-FC-01 | Add fixed cost | POST {name "Rent", amount} | 201 |
 | API-FC-02 | Zero amount | amount 0 | 400 |
@@ -247,9 +254,9 @@ One anonymised sample per bank lives in `server/src/test/resources/statements/`.
 
 | ID | Case | Request | Expected |
 |---|---|---|---|
-| API-TDY-01 | Example day | GET /budget/today | budget 59300, spent 18000, left 41300, daysLeft 9, mood happy, line in Chill voice, streak 5, forecast present |
+| API-TDY-01 | Example day | GET /budget/today | budget 59300, spent 18000, left 41300, daysLeft 9, mood HAPPY, line "₹413 left for today. Nice and steady.", cycle 1 to 31 Oct (streak and forecast arrive in Plans 5 and 6) |
 | API-TDY-02 | Nervous | spent 85% | mood nervous |
-| API-TDY-03 | Fainted | spent 72000 | mood fainted, over 12700, catchUp null unless a goal is behind |
+| API-TDY-03 | Fainted | spent 72000 | mood FAINTED, over 12700, left 0 |
 | API-TDY-04 | Goal behind | Goa behind ₹1,800 | catchUp with three options and their numbers |
 | API-TDY-05 | Strict goal behind | | catchUp with tighten only |
 | API-TDY-06 | Pool negative | | budget 0, catchUp present |

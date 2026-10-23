@@ -50,7 +50,7 @@ The data pipeline is built so that Account Aggregator can be added in V2 as one 
 
 A cycle runs from one payday to the day before the next. Payday is one of: a fixed day of the month (1 to 28), the last working day (last Monday to Friday of the month; public holidays are ignored in V1), or "another date" (also 1 to 28). Changing the payday takes effect from the next cycle. Changes to income, fixed costs or savings apply to the current cycle at once.
 
-All budget maths is done in paise and rounded down; the app shows whole rupees.
+All budget maths is done in paise and rounded down; the app shows whole rupees. The daily budget itself is rounded down to whole rupees, and the paise remainder stays in the pool, so every figure on screen adds up.
 
 For each cycle:
 
@@ -69,6 +69,7 @@ Rules:
 - Money not spent today stays in the pool, so tomorrow's budget rises a little. Overspending lowers it. Nothing resets mid-cycle.
 - If the pool goes below zero, the daily budget is ₹0 until payday, the Gullak faints, and the catch-up plan appears.
 - Fixed costs and transfers to savings or SIPs never count against the daily budget, even when they appear in a statement.
+- The first cycle after setup usually starts mid-cycle. Its spendable amount is pro-rated: monthly spendable × days left including today ÷ days in the cycle, rounded down to whole rupees. Setup asks "How much money do you have left until payday?" pre-filled with that figure, and the user's answer replaces it for this first cycle only. (Built in Plan 2 with Home first run.)
 - A big one-off spend (for example a ₹15,000 flight) can be marked "spread over the cycle". It reduces the pool but is left out of today's spent figure, so one purchase does not faint the Gullak.
 - Extra income (bonus, refund of a deposit) is a credit the user assigns: to savings, to the pool, or split.
 - At cycle close, money left in the pool becomes "extra saved" and is added to savings (see 2.2). The user can instead roll it into the next cycle from the cycle summary.
@@ -176,7 +177,7 @@ Logging accuracy = confirmed spends ÷ (confirmed + statement-only spends) for t
 
 ### 2.6 The Gullak and the game
 
-Mood follows today's budget used: 0 to 49% happy, 50 to 79% calm, 80 to 100% nervous, over 100% fainted. Celebrating shows for a moment on a streak day, a milestone or a level-up. The Gullak never dies; a fainted Gullak is back the next morning.
+Mood follows today's budget used: 0 to 49% happy, 50 to 79% calm, 80 to 100% nervous, over 100% fainted. A ₹0 budget with nothing overspent (the pool at exactly zero, or too small to give ₹1 a day) shows nervous, not fainted; the Gullak faints only when today's spend passes the budget or the pool goes below zero. The fainted line's "over by" figure is today's overspend plus any amount the pool is below zero. Celebrating shows for a moment on a streak day, a milestone or a level-up. The Gullak never dies; a fainted Gullak is back the next morning.
 
 Growth stages by level: clay pot (levels 1 to 4), painted (5 to 9), gold (10 to 19), diamond (20 and up). Reaching a stage is a full-screen moment with a share button.
 
@@ -343,8 +344,8 @@ gullak/
 - Validate at the edge with `jakarta.validation` on request records (`@Positive` amounts, `@Size`, `@Pattern`). Services assume valid input and enforce business rules.
 - One `@RestControllerAdvice` turns exceptions into `{code, message}` with the right status. Business errors are typed exceptions with a code from one enum shared with the app.
 - `@Transactional` on service methods that write; read-only methods marked `readOnly = true`.
-- Spring Data JPA for simple access; JDBC or native queries for the budget, insights and matching queries, with tests against real Postgres.
-- Flyway owns the schema. No `ddl-auto`. Every migration is forward-only and reviewed.
+- Spring Data JPA (entities and repositories per feature) for ordinary reads and writes; JdbcClient or native queries for aggregate queries (budget totals, insights, matching), tested against real Postgres. Schema is owned by Flyway; Hibernate only validates it.
+- Hibernate only validates the schema (`ddl-auto: validate`); Flyway owns it. Every migration is forward-only and reviewed.
 - Configuration through `application.yml` and environment variables. Secrets never in the repository.
 - Scheduled jobs (daily close, off-track push, draft cleanup) are idempotent, keyed by (user, date), and use a database lock so two instances cannot run the same job.
 - Actuator exposes `health` only, unauthenticated, for the platform's checks.
@@ -417,11 +418,11 @@ REST under `/api/v1`, JSON, money in paise, dates as ISO strings. Errors are `{c
 
 Login and sessions:
 
-- 6-digit email OTP, 10-minute expiry, 5 attempts, then a new code is needed. The response to a request is identical whether or not the email exists.
-- Rate limits per email and per IP on OTP request and verify.
+- 6-digit email OTP, 10-minute expiry, 5 attempts, then a new code is needed. A new request retires the previous code. At most 10 failed guesses per email in 24 hours, counted in the database; after that sign-in waits until the next day. The response to a request is identical whether or not the email exists.
+- Rate limits per email and per IP on OTP request and verify. The client IP comes from `X-Forwarded-For` only when the connection is from a configured trusted proxy (`GULLAK_TRUSTED_PROXIES`); otherwise the socket address is used.
 - Access token: JWT, 15 minutes, signed with a server key, carries only the user ID. Refresh token: random 256-bit, 30 days, stored hashed, single use, rotated on every refresh. Reuse of a spent refresh token revokes every session for that user.
 - On the phone, tokens live in Expo SecureStore. On the web, the refresh token is an `httpOnly`, `Secure`, `SameSite=Strict` cookie and the access token stays in memory; refresh needs a custom header, which blocks CSRF.
-- Sign out revokes the refresh token server-side.
+- Sign out revokes the refresh token server-side. Only a refresh token that was already used counts as reuse and revokes every session; an expired or logged-out token is simply rejected. Access tokens on the public auth routes are ignored, so refresh and logout work after the access token expires. An access token stays valid until its 15-minute expiry after logout (stateless by design).
 
 Authorisation:
 

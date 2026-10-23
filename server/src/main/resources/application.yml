@@ -1,0 +1,57 @@
+spring:
+  application:
+    name: gullak
+  threads:
+    virtual:
+      enabled: true
+  jackson:
+    deserialization:
+      # Money is whole paise: 1.5 must be rejected, not truncated to 1.
+      accept-float-as-int: false
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
+server:
+  # Only the proxies listed here may set the client address through X-Forwarded-For.
+  # Empty trusts no proxy; production sets the load balancer's address as a regex.
+  forward-headers-strategy: native
+  tomcat:
+    remoteip:
+      internal-proxies: ${GULLAK_TRUSTED_PROXIES:}
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
+management:
+  endpoints:
+    web:
+      discovery:
+        enabled: false
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+logging:
+  pattern:
+    correlation: "[%X{requestId:-}] [%X{userId:-}] "
+gullak:
+  http:
+    max-body-bytes: 65536
+  auth:
+    jwt-secret: ${GULLAK_JWT_SECRET}
+    otp-pepper: ${GULLAK_OTP_PEPPER}
+    access-ttl: 15m
+    refresh-ttl: 30d
+    otp-ttl: 10m
+    verify-email-limit: 30
+    verify-email-window: 15m

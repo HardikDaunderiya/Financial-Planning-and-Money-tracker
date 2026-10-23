@@ -17,7 +17,7 @@ module.exports = {
     {
       displayName: "web",
       preset: "jest-expo/web",
-      setupFilesAfterEnv: ["<rootDir>/jest.setup.ts"],
+      setupFilesAfterEnv: ["<rootDir>/jest.setup.web.ts"],
       testMatch: ["<rootDir>/src/**/*.web.test.ts", "<rootDir>/src/**/*.web.test.tsx"],
       moduleNameMapper: { "^@/(.*)$": "<rootDir>/src/$1" },
     },

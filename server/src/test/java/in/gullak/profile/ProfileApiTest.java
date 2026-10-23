@@ -54,11 +54,15 @@ class ProfileApiTest extends ApiTest {
     }
 
     @Test
-    void fixedDayNeedsADay() throws Exception {
+    void fixedDayNeedsADay() throws Exception { // M-4
         TestUser u = signIn();
         putProfile(u, EXAMPLE_PROFILE.replace("\"paydayDay\":1,", ""))
             .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.code").value("VALIDATION"));
+            .andExpect(jsonPath("$.code").value("VALIDATION"))
+            .andExpect(jsonPath("$.message").value("Check the highlighted fields"))
+            .andExpect(jsonPath("$.fields.length()").value(1))
+            .andExpect(jsonPath("$.fields[0].field").value("paydayDay"))
+            .andExpect(jsonPath("$.fields[0].message").value("Pick the day your salary arrives"));
     }
 
     @Test

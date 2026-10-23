@@ -37,7 +37,7 @@ public class ProfileService {
         Integer day = switch (r.paydayRule()) {
             case FIXED_DAY -> {
                 if (r.paydayDay() == null) {
-                    throw new ValidationException("Pick the day your salary arrives");
+                    throw new ValidationException("paydayDay", "Pick the day your salary arrives");
                 }
                 yield r.paydayDay();
             }

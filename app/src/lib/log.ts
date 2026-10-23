@@ -21,12 +21,20 @@ const ALLOWED_KEYS = new Set([
   "message",
 ]);
 const ERROR_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
+const MAX_STRING = 200;
 const FORBIDDEN_VALUES = [
-  /[^\s@]+@[^\s@]+\.[^\s@]+/, // email
+  /[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{1,64}/, // email
   /eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*/, // JWT
-  /\d{6}/, // a run of 6 digits (OTP code)
-  /(₹|\brs\b\.?|\binr\b)\s*\d/i, // a money amount
+  /eyJ[A-Za-z0-9_-]{10,}/, // a bare JWT segment
+  /(₹|\b(rs|inr)\.?)\s*\d/i, // a money amount
 ];
+
+/** True when a string could carry an email, a token, a code or an amount. Over-long strings are dropped before any regex runs. */
+function isSensitive(value: string): boolean {
+  if (value.length > MAX_STRING) return true;
+  if (FORBIDDEN_VALUES.some((re) => re.test(value))) return true;
+  return /\d{6}/.test(value.replace(/[\s-]/g, "")); // OTP code, even spaced or dashed
+}
 
 /**
  * Allow-list redaction (LOG-09): only known keys with string, number or boolean values pass,
@@ -45,7 +53,7 @@ export function redact(data: Record<string, unknown> | undefined): Record<string
         } else if (typeof value === "string") {
           if (key === "errorCode") {
             out[key] = ERROR_CODE.test(value) ? value : "invalid";
-          } else if (!FORBIDDEN_VALUES.some((re) => re.test(value))) {
+          } else if (!isSensitive(value)) {
             out[key] = value;
           }
         }

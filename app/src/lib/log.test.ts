@@ -119,6 +119,21 @@ describe("redaction (LOG-09)", () => {
     expect(redact({ message: "status 200" })).toEqual({ message: "status 200" });
   });
 
+  it.each(["123 456", "123-456", "1 2 3 4 5 6", "Rs250", "INR1000", "eyJhbGciOiJIUzI1NiJ9", "a@b.com"])(
+    "drops %s under message and under id",
+    (value) => {
+      expect(redact({ message: value })).toEqual({});
+      expect(redact({ id: value })).toEqual({});
+    },
+  );
+
+  it("drops a huge string quickly, before any regex runs", () => {
+    const started = Date.now();
+    expect(redact({ message: "a".repeat(1_000_000) })).toEqual({});
+    expect(redact({ message: "a@".repeat(500_000) })).toEqual({});
+    expect(Date.now() - started).toBeLessThan(50);
+  });
+
   it("errorCode passes only when it looks like a code, else becomes invalid", () => {
     expect(redact({ errorCode: "OTP_INVALID" })).toEqual({ errorCode: "OTP_INVALID" });
     expect(redact({ errorCode: "a@b.com" })).toEqual({ errorCode: "invalid" });

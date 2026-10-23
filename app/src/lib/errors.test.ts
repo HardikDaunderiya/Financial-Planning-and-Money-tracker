@@ -33,6 +33,18 @@ describe("error messages (ERR-16)", () => {
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
+  it("through the production logger two calls give exactly one warn event", () => {
+    const events: { level: string; event: string; data?: Record<string, unknown> | undefined }[] = [];
+    const logger = createLogger({
+      dev: false,
+      console: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+      sink: { report: (level, event, data) => void events.push({ level, event, data }) },
+    });
+    messageFor("BRAND_NEW_2", logger);
+    messageFor("BRAND_NEW_2", logger);
+    expect(events).toEqual([{ level: "warn", event: "error.unmapped", data: { errorCode: "BRAND_NEW_2" } }]);
+  });
+
   it("a hostile code is logged as invalid", () => {
     const events: { data?: Record<string, unknown> | undefined }[] = [];
     const logger = createLogger({

@@ -1,8 +1,8 @@
 /* Red team, plan-02 task 4: tokens in logs, storage and the session. Tests that FAIL demonstrate a finding. */
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { act, render } from "@testing-library/react-native";
+import { act, render, waitFor } from "@testing-library/react-native";
 import React from "react";
-import { createApi } from "@/lib/api";
+import { createApi, type SessionControl } from "@/lib/api";
 import { NetworkError } from "@/lib/api-errors";
 import { SessionProvider, useSession } from "@/features/auth/session";
 import { queryClient, persister, persistOptions } from "@/lib/query";
@@ -140,6 +140,19 @@ describe("RT tokens never in AsyncStorage / query cache", () => {
 });
 
 describe("RT session sign-out", () => {
+  function setupControl(control: SessionControl, logout: (r: string) => Promise<void>) {
+    let session!: ReturnType<typeof useSession>;
+    function P() {
+      session = useSession();
+      return null;
+    }
+    return render(
+      <SessionProvider control={control} logout={logout}>
+        <P />
+      </SessionProvider>,
+    ).then(() => () => session);
+  }
+
   function setup(store: TokenStore, logout: (r: string) => Promise<void>) {
     let session!: ReturnType<typeof useSession>;
     function P() {
@@ -200,20 +213,36 @@ describe("RT session sign-out", () => {
   });
 
   it("FINDING sign-out must revoke the server session even when the token was rotated mid-flight (logout sends the freshest refresh token)", async () => {
-    // signOut loads tokens, then calls logout(R1) while a refresh is in flight that rotates R1->R2.
+    // A request's refresh rotates R1->R2 while the user taps sign out. The rotation goes through the shared
+    // owner (api.session), exactly as in production; logout must carry the live R2 and R1 is never sent twice.
     const store = memoryStore({ accessToken: "A1", refreshToken: "R1" });
-    const sent: string[] = [];
-    const gate = deferred<void>();
-    const get = await setup(store, async (r) => {
-      sent.push(r);
-      await gate.promise;
+    const gate = deferred<ReturnType<typeof json>>();
+    const refreshBodies: string[] = [];
+    const api = createApi({
+      baseUrl: "http://test.local/api/v1",
+      tokens: store,
+      onSignedOut: () => undefined,
+      fetchFn: ((url: string, init: RequestInit) => {
+        if (url.endsWith("/auth/refresh")) {
+          refreshBodies.push(init.body as string);
+          return gate.promise;
+        }
+        return Promise.resolve(json(401, EXPIRED));
+      }) as unknown as typeof fetch,
     });
+    const sent: string[] = [];
+    const get = await setupControl(api.session, (r) => {
+      sent.push(r);
+      return Promise.resolve();
+    });
+    const request = api.get("/budget/today").catch(() => undefined);
+    await waitFor(() => expect(refreshBodies).toHaveLength(1)); // the refresh is in flight
     const p = get().signOut();
-    await new Promise((r) => setTimeout(r, 0));
-    await store.save({ accessToken: "A2", refreshToken: "R2" }); // refresh landed
-    gate.resolve();
+    gate.resolve(json(200, { accessToken: "A2", refreshToken: "R2", expiresIn: 900 }));
     await act(async () => p);
+    await request;
     expect(store.tokens).toBeNull(); // cleared
     expect(sent).toEqual(["R2"]); // the server only revokes the live token; R1 is used and would revoke all sessions
+    expect(refreshBodies.filter((b) => b.includes("R1"))).toHaveLength(1);
   });
 });

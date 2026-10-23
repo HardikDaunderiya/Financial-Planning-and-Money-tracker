@@ -33,97 +33,124 @@ export type SessionControl = {
 };
 
 export type TokenOwner = SessionControl & {
+  /** Bumped by every stored-pair change, including a refresh save. */
   generation(): number;
+  /** Bumped by signIn, signOut and endSession only: identifies one signed-in session. */
+  epoch(): number;
   inflight(): Promise<Tokens> | null;
   setInflight(p: Promise<Tokens> | null): void;
   isSigningOut(): boolean;
-  /** A sign-out is waiting: remember the pair the server just issued so logout revokes the live token. */
-  noteRotated(next: Tokens): void;
   /** Saves a refreshed pair only if nothing changed the session since the refresh started. */
-  saveRefreshed(next: Tokens, used: Tokens, startGeneration: number): Promise<boolean>;
+  saveRefreshed(next: Tokens, used: Tokens, startGeneration: number, startEpoch: number): Promise<boolean>;
   /** Clears the session if it is still the one that was rejected. True when this call cleared it. */
-  endSession(used: Tokens, startGeneration: number): Promise<boolean>;
+  endSession(used: Tokens, startGeneration: number, startEpoch: number): Promise<boolean>;
+  /** True once per epoch, when a 401 arrives and nothing is stored. */
+  noticeEmpty(startEpoch: number): boolean;
   load(): Promise<Tokens | null>;
 };
 
-const SETTLE_MS = 10;
-
-/** Owns the stored pair and a generation counter that every change bumps (refresh races, spec 4.7). */
+/** Owns the stored pair, a generation (every change) and an epoch (one per session). Refresh races, spec 4.7. */
 export function createTokenOwner(store: TokenStore): TokenOwner {
   let generation = 0;
+  let epoch = 0;
+  let noticedEpoch = -1;
   let inflight: Promise<Tokens> | null = null;
-  let signingOut = false;
-  const held: { rotated: Tokens | null } = { rotated: null };
-  const rotatedToken = (): string | null => held.rotated?.refreshToken ?? null;
+  let signOutRun: Promise<void> | null = null;
+  let clearing: Promise<void> | null = null;
+  let ending: Promise<void> | null = null;
 
+  const waitForRefresh = async () => {
+    if (inflight) await inflight.catch(() => undefined);
+  };
+  const stale = (startGeneration: number, startEpoch: number) =>
+    generation !== startGeneration || epoch !== startEpoch;
   const sameSession = async (used: Tokens) => {
     const now = await store.load();
     return now !== null && now.refreshToken === used.refreshToken;
   };
-  const waitForRefresh = async () => {
-    if (inflight) await inflight.catch(() => undefined);
-  };
+
+  async function runSignOut(logout: (t: string) => Promise<void>, onCleared?: () => void) {
+    let markCleared: () => void = () => undefined;
+    clearing = new Promise<void>((resolve) => (markCleared = resolve));
+    let refreshToken: string | null = null;
+    try {
+      await waitForRefresh(); // the refresh saves its pair normally, so we revoke the live token
+      epoch += 1;
+      try {
+        refreshToken = (await store.load())?.refreshToken ?? null;
+      } catch (e) {
+        log.warn("session.read_failed", { reason: e instanceof Error ? e.name : "unknown" });
+      }
+      generation += 1;
+      await store.clear();
+      onCleared?.();
+    } finally {
+      clearing = null;
+      markCleared();
+    }
+    if (refreshToken) {
+      try {
+        await logout(refreshToken);
+      } catch (e) {
+        // Local sign-out already happened; the server token expires on its own.
+        log.warn(e instanceof NetworkError ? "auth.logout_offline" : "auth.logout_rejected", {
+          reason: e instanceof Error ? e.name : "unknown",
+        });
+      }
+    }
+  }
 
   return {
     generation: () => generation,
+    epoch: () => epoch,
     inflight: () => inflight,
     setInflight: (p) => {
       inflight = p;
     },
-    isSigningOut: () => signingOut,
-    noteRotated: (next) => {
-      held.rotated = next;
-    },
+    isSigningOut: () => signOutRun !== null,
     load: () => store.load(),
     current: () => store.load(),
-    async saveRefreshed(next, used, startGeneration) {
-      if (generation !== startGeneration || !(await sameSession(used))) return false;
-      await store.save(next);
-      generation += 1;
+    noticeEmpty(startEpoch) {
+      if (epoch !== startEpoch || noticedEpoch === epoch) return false;
+      noticedEpoch = epoch;
       return true;
     },
-    async endSession(used, startGeneration) {
-      if (generation !== startGeneration || !(await sameSession(used))) return false;
+    async saveRefreshed(next, used, startGeneration, startEpoch) {
+      if (stale(startGeneration, startEpoch)) return false;
+      const same = await sameSession(used);
+      if (!same || stale(startGeneration, startEpoch)) return false;
       generation += 1;
-      await store.clear();
+      await store.save(next);
+      return true;
+    },
+    async endSession(used, startGeneration, startEpoch) {
+      if (stale(startGeneration, startEpoch)) return false;
+      const same = await sameSession(used);
+      if (!same || stale(startGeneration, startEpoch)) return false;
+      generation += 1;
+      epoch += 1;
+      noticedEpoch = epoch;
+      const write = store.clear();
+      ending = write.then(
+        () => undefined,
+        () => undefined,
+      );
+      await write;
       return true;
     },
     async signIn(tokens) {
-      generation += 1;
+      epoch += 1; // invalidates in-flight requests and refreshes of the old session
+      await clearing;
+      await ending;
       await waitForRefresh();
-      await store.save(tokens);
       generation += 1;
+      await store.save(tokens);
     },
-    async signOut(logout, onCleared) {
-      signingOut = true;
-      held.rotated = null;
-      try {
-        generation += 1;
-        await waitForRefresh();
-        // Let a write that raced the tap land, so logout carries the freshest token.
-        await new Promise<void>((r) => setTimeout(r, SETTLE_MS));
-        let refreshToken: string | null = rotatedToken();
-        try {
-          refreshToken = rotatedToken() ?? (await store.load())?.refreshToken ?? null;
-        } catch (e) {
-          log.warn("session.read_failed", { reason: e instanceof Error ? e.name : "unknown" });
-        }
-        generation += 1;
-        await store.clear();
-        onCleared?.();
-        if (refreshToken) {
-          try {
-            await logout(refreshToken);
-          } catch (e) {
-            // Local sign-out already happened; the server token expires on its own.
-            log.warn(e instanceof NetworkError ? "auth.logout_offline" : "auth.logout_rejected", {
-              reason: e instanceof Error ? e.name : "unknown",
-            });
-          }
-        }
-      } finally {
-        signingOut = false;
-      }
+    signOut(logout, onCleared) {
+      signOutRun ??= runSignOut(logout, onCleared).finally(() => {
+        signOutRun = null;
+      });
+      return signOutRun;
     },
   };
 }
@@ -260,7 +287,7 @@ export function createApi(deps: ApiDeps): ApiWithSession {
     }
   }
 
-  async function runRefresh(current: Tokens, startGeneration: number): Promise<Tokens> {
+  async function runRefresh(current: Tokens, startGeneration: number, startEpoch: number): Promise<Tokens> {
     const { status, data } = await send(
       "POST",
       "/auth/refresh",
@@ -270,7 +297,7 @@ export function createApi(deps: ApiDeps): ApiWithSession {
     if (status >= 400) {
       const err = toError(status, data);
       if (status === 401 && err instanceof ApiError && SESSION_ENDING_CODES.has(err.code)) {
-        if (await owner.endSession(current, startGeneration)) deps.onSignedOut();
+        if (await owner.endSession(current, startGeneration, startEpoch)) deps.onSignedOut();
       }
       throw err;
     }
@@ -284,9 +311,8 @@ export function createApi(deps: ApiDeps): ApiWithSession {
       throw new UnknownError("Refresh gave no tokens", status);
     }
     const next = { accessToken: pair.accessToken, refreshToken: pair.refreshToken };
-    if (await owner.saveRefreshed(next, current, startGeneration)) return next;
+    if (await owner.saveRefreshed(next, current, startGeneration, startEpoch)) return next;
     // The session changed while we refreshed: drop this pair, use whatever is stored now.
-    if (owner.isSigningOut()) owner.noteRotated(next);
     const latest = await owner.load();
     if (!latest) throw new ApiError("UNAUTHENTICATED", 401, "");
     return latest;
@@ -302,7 +328,7 @@ export function createApi(deps: ApiDeps): ApiWithSession {
     if (raced) return raced;
     if (current.refreshToken !== used.refreshToken) return current;
     if (owner.isSigningOut()) throw new ApiError("UNAUTHENTICATED", 401, "");
-    const p = runRefresh(current, owner.generation()).finally(() => {
+    const p = runRefresh(current, owner.generation(), owner.epoch()).finally(() => {
       if (owner.inflight() === p) owner.setInflight(null);
     });
     owner.setInflight(p);
@@ -316,16 +342,22 @@ export function createApi(deps: ApiDeps): ApiWithSession {
     options: RequestOptions = {},
   ): Promise<T> {
     const auth = options.auth ?? true;
+    const startEpoch = owner.epoch();
     const stored = auth ? await owner.load() : null;
     const startGeneration = owner.generation();
     let { status, data } = await send(method, path, body, stored?.accessToken ?? null, options.signal);
-    if (status === 401 && auth && stored) {
-      const code = codeOf(data);
-      if (code === "TOKEN_EXPIRED") {
+    if (status === 401 && auth) {
+      // The session this request belongs to is gone (sign-out or another account): never retry it.
+      const gone = () => new ApiError("UNAUTHENTICATED", 401, "");
+      if (owner.epoch() !== startEpoch) throw gone();
+      if (!stored) {
+        if (owner.noticeEmpty(startEpoch)) deps.onSignedOut();
+      } else if (codeOf(data) === "TOKEN_EXPIRED") {
         const fresh = await freshTokens(stored);
+        if (owner.epoch() !== startEpoch) throw gone();
         ({ status, data } = await send(method, path, body, fresh.accessToken, options.signal));
-      } else if (code === "UNAUTHENTICATED") {
-        if (await owner.endSession(stored, startGeneration)) deps.onSignedOut();
+      } else if (codeOf(data) === "UNAUTHENTICATED") {
+        if (await owner.endSession(stored, startGeneration, startEpoch)) deps.onSignedOut();
       }
     }
     if (status >= 400) throw toError(status, data);

@@ -20,11 +20,16 @@ type Props = {
   children: React.ReactNode;
   /** Tests inject a store; the app uses the API client's own session so token ownership stays in one place. */
   store?: TokenStore;
+  /** An explicit session control, e.g. `createApi(...).session`, shared with the API client that refreshes. */
+  control?: SessionControl;
   logout?: (refreshToken: string) => Promise<void>;
 };
 
-export function SessionProvider({ children, store, logout = authApi.logout }: Props) {
-  const control: SessionControl = useMemo(() => (store ? createTokenOwner(store) : api.session), [store]);
+export function SessionProvider({ children, store, control: given, logout = authApi.logout }: Props) {
+  const control: SessionControl = useMemo(
+    () => given ?? (store ? createTokenOwner(store) : api.session),
+    [given, store],
+  );
   const [status, setStatus] = useState<SessionStatus>("loading");
 
   useEffect(() => {

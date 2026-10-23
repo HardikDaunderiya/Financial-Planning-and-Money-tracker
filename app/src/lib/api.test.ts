@@ -250,3 +250,86 @@ describe("refresh races and failures", () => {
     expect(logout).toHaveBeenCalledWith("R2");
   });
 });
+
+describe("session epoch and single-flight sign-out", () => {
+  const tick = () => new Promise<void>((r) => setImmediate(r));
+  const expired = { code: "TOKEN_EXPIRED", message: "x" };
+
+  it("P1: sign-out during a refresh, called twice, sends exactly one logout carrying the rotated token", async () => {
+    let release: (r: FakeResponse) => void = () => undefined;
+    const gate = new Promise<FakeResponse>((resolve) => (release = resolve));
+    const { api, store } = setup((call) => (call.url.endsWith("/auth/refresh") ? gate : json(401, expired)));
+    const request = api.get("/budget/today").catch(() => undefined);
+    await tick();
+    const logout = jest.fn((_token: string) => Promise.resolve());
+    const first = api.session.signOut(logout);
+    release(json(200, { accessToken: "A2", refreshToken: "R2", expiresIn: 900 }));
+    const second = api.session.signOut(logout);
+    await Promise.all([request, first, second]);
+    expect(logout).toHaveBeenCalledTimes(1);
+    expect(logout).toHaveBeenCalledWith("R2");
+    expect(store.tokens).toBeNull();
+  });
+
+  it("P2: a slow endSession read does not wipe a session signed in meanwhile", async () => {
+    const store = memoryStore();
+    let release: () => void = () => undefined;
+    const slowGate = new Promise<void>((resolve) => (release = resolve));
+    let slow = false;
+    const originalLoad = store.load;
+    store.load = () => {
+      if (!slow) return originalLoad();
+      const snapshot = store.tokens;
+      return slowGate.then(() => snapshot);
+    };
+    const { api, onSignedOut } = setup(() => {
+      slow = true;
+      return json(401, { code: "UNAUTHENTICATED", message: "x" });
+    }, store);
+    const request = api.get("/budget/today").catch(() => undefined);
+    await tick();
+    slow = false;
+    await api.session.signIn({ accessToken: "B-A", refreshToken: "B-R" });
+    release();
+    await request;
+    expect(store.tokens).toEqual({ accessToken: "B-A", refreshToken: "B-R" });
+    expect(onSignedOut).not.toHaveBeenCalled();
+  });
+
+  it("P3: a late 401 from the previous account is not retried with the new account's token", async () => {
+    let release: (r: FakeResponse) => void = () => undefined;
+    const late = new Promise<FakeResponse>((resolve) => (release = resolve));
+    const { api, calls } = setup((call) => (call.url.endsWith("/me/fixed-costs") ? late : json(200, {})));
+    const post = api.post("/me/fixed-costs", { amountPaise: 100 }).catch((e: unknown) => e);
+    await tick();
+    await api.session.signOut(() => Promise.resolve());
+    await api.session.signIn({ accessToken: "B-A", refreshToken: "B-R" });
+    release(json(401, expired));
+    await expect(post).resolves.toMatchObject({ code: "UNAUTHENTICATED" });
+    expect(calls).toHaveLength(1);
+    expect(calls.some((c) => header(c, "Authorization") === "Bearer B-A")).toBe(false);
+  });
+
+  it("P4: signing in during a sign-out keeps the new session and revokes only the old token", async () => {
+    let release: () => void = () => undefined;
+    const hang = new Promise<void>((resolve) => (release = resolve));
+    const { api, store } = setup(() => json(200, {}));
+    const logout = jest.fn((_token: string) => hang);
+    const out = api.session.signOut(logout);
+    await api.session.signIn({ accessToken: "B-A", refreshToken: "B-R" });
+    release();
+    await out;
+    expect(store.tokens).toEqual({ accessToken: "B-A", refreshToken: "B-R" });
+    expect(logout.mock.calls).toEqual([["R1"]]);
+  });
+
+  it("a 401 with an already empty store tells the session once", async () => {
+    const { api, onSignedOut } = setup(
+      () => json(401, { code: "UNAUTHENTICATED", message: "x" }),
+      memoryStore(null),
+    );
+    await api.get("/a").catch(() => undefined);
+    await api.get("/b").catch(() => undefined);
+    expect(onSignedOut).toHaveBeenCalledTimes(1);
+  });
+});

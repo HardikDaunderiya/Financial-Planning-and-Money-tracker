@@ -10,6 +10,7 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class BudgetService {
@@ -28,6 +29,8 @@ public class BudgetService {
         this.clock = clock;
     }
 
+    /** One transaction so every figure comes from the same snapshot; read-write because it may open a cycle. */
+    @Transactional
     public TodayResponse today(UUID userId) {
         Profile profile = profiles.get(userId);
         LocalDate today = Ist.today(clock);

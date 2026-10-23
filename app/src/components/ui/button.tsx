@@ -23,7 +23,17 @@ export type ButtonProps = {
   testID?: string;
 };
 
-export function Button({ title, onPress, variant = "primary", disabled, loading, icon, iconOnly, style, testID }: ButtonProps) {
+export function Button({
+  title,
+  onPress,
+  variant = "primary",
+  disabled,
+  loading,
+  icon,
+  iconOnly,
+  style,
+  testID,
+}: ButtonProps) {
   const v = variants[variant];
   const off = !!disabled || !!loading;
   return (

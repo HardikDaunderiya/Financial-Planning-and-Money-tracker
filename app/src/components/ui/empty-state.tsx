@@ -3,7 +3,15 @@ import { View } from "react-native";
 import { colors, radius, spacing } from "@/theme";
 import { Text } from "./text";
 
-export function EmptyState({ title, body, action }: { title: string; body?: string; action?: React.ReactNode }) {
+export function EmptyState({
+  title,
+  body,
+  action,
+}: {
+  title: string;
+  body?: string;
+  action?: React.ReactNode;
+}) {
   return (
     <View
       style={{

@@ -5,7 +5,8 @@ import { colors } from "@/theme";
 const paths = {
   home: "M3 11l9-7 9 7M5 10v10h14V10M10 20v-6h4v6",
   chart: "M4 20V11M10 20V5M16 20v-6M2 20h20",
-  target: "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 7a5 5 0 1 0 0 10a5 5 0 1 0 0-10M12 11a1 1 0 1 0 0 2a1 1 0 1 0 0-2",
+  target:
+    "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 7a5 5 0 1 0 0 10a5 5 0 1 0 0-10M12 11a1 1 0 1 0 0 2a1 1 0 1 0 0-2",
   user: "M12 12a4 4 0 1 0 0-8a4 4 0 1 0 0 8M4 21c1-4 4-6 8-6s7 2 8 6",
   plus: "M12 5v14M5 12h14",
   minus: "M5 12h14",
@@ -37,7 +38,13 @@ const paths = {
 
 export type IconName = keyof typeof paths;
 
-export type IconProps = { name: IconName; size?: number; color?: string; strokeWidth?: number; label?: string };
+export type IconProps = {
+  name: IconName;
+  size?: number;
+  color?: string;
+  strokeWidth?: number;
+  label?: string;
+};
 
 /** Decorative by default; pass `label` only when the icon is the sole content of a control. */
 export function Icon({ name, size = 24, color = colors.ink, strokeWidth = 2, label }: IconProps) {

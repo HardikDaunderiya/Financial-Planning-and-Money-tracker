@@ -4,7 +4,15 @@ import { colors, radius, spacing } from "@/theme";
 import { Button } from "./button";
 import { Text } from "./text";
 
-export function ErrorState({ title = "Something went wrong", body, onRetry }: { title?: string; body?: string; onRetry: () => void }) {
+export function ErrorState({
+  title = "Something went wrong",
+  body,
+  onRetry,
+}: {
+  title?: string;
+  body?: string;
+  onRetry: () => void;
+}) {
   return (
     <View
       accessibilityRole="alert"
@@ -25,7 +33,12 @@ export function ErrorState({ title = "Something went wrong", body, onRetry }: { 
           {body}
         </Text>
       ) : null}
-      <Button title="Retry" variant="secondary" onPress={onRetry} style={{ alignSelf: "stretch", marginTop: spacing.sm }} />
+      <Button
+        title="Retry"
+        variant="secondary"
+        onPress={onRetry}
+        style={{ alignSelf: "stretch", marginTop: spacing.sm }}
+      />
     </View>
   );
 }

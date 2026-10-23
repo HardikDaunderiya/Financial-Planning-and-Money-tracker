@@ -12,7 +12,9 @@ import { ErrorState } from "./error-state";
 import { touchTarget } from "@/theme";
 
 function minHeightOf(node: { props: { style?: unknown } }): number {
-  const flat = Object.assign({}, ...[node.props.style].flat(Infinity).filter(Boolean)) as { minHeight?: number };
+  const flat = Object.assign({}, ...[node.props.style].flat(Infinity).filter(Boolean)) as {
+    minHeight?: number;
+  };
   return flat.minHeight ?? 0;
 }
 
@@ -52,7 +54,16 @@ describe("UI primitives (APP-29)", () => {
   });
 
   it("Icon-only controls carry a label: Stepper minus and plus", async () => {
-    await render(<Stepper label="Save every month" valuePaise={2000000} stepPaise={100000} min={0} max={3500000} onChange={() => {}} />);
+    await render(
+      <Stepper
+        label="Save every month"
+        valuePaise={2000000}
+        stepPaise={100000}
+        min={0}
+        max={3500000}
+        onChange={() => {}}
+      />,
+    );
     expect(screen.getByLabelText("Save ₹1,000 less")).toBeTruthy();
     expect(screen.getByLabelText("Save ₹1,000 more")).toBeTruthy();
   });
@@ -71,18 +82,27 @@ describe("UI primitives (APP-29)", () => {
 
   it("Icon is hidden from assistive tech by default", async () => {
     await render(<Icon name="home" />);
-    expect(screen.getByTestId("icon-home", { includeHiddenElements: true })).toHaveProp("accessibilityElementsHidden", true);
+    expect(screen.getByTestId("icon-home", { includeHiddenElements: true })).toHaveProp(
+      "accessibilityElementsHidden",
+      true,
+    );
   });
 
   it("Field links its label and shows an error", async () => {
-    await render(<Field label="Take-home pay per month" value="" onChangeText={() => {}} error="Enter your salary" />);
+    await render(
+      <Field label="Take-home pay per month" value="" onChangeText={() => {}} error="Enter your salary" />,
+    );
     expect(screen.getByLabelText("Take-home pay per month")).toBeTruthy();
     expect(screen.getByText("Enter your salary")).toBeTruthy();
   });
 
   it("ProgressBar exposes its value", async () => {
     await render(<ProgressBar value={30} label="Budget used" />);
-    expect(screen.getByRole("progressbar", { name: "Budget used" })).toHaveAccessibilityValue({ now: 30, min: 0, max: 100 });
+    expect(screen.getByRole("progressbar", { name: "Budget used" })).toHaveAccessibilityValue({
+      now: 30,
+      min: 0,
+      max: 100,
+    });
   });
 
   it("ErrorState has a Retry button", async () => {

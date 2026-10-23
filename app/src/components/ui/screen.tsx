@@ -20,7 +20,12 @@ export function Screen({ children, footer, contentStyle, scrollProps, testID }: 
       <ScrollView
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={[
-          { paddingTop: insets.top + spacing.md, paddingHorizontal: spacing.md, paddingBottom: spacing.lg, gap: spacing.md },
+          {
+            paddingTop: insets.top + spacing.md,
+            paddingHorizontal: spacing.md,
+            paddingBottom: spacing.lg,
+            gap: spacing.md,
+          },
           contentStyle,
         ]}
         {...scrollProps}

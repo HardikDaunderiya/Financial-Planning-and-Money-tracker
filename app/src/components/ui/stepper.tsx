@@ -17,18 +17,41 @@ export type StepperProps = {
   testID?: string;
 };
 
-export function Stepper({ label, valuePaise, stepPaise, min, max, onChange, onPressValue, testID }: StepperProps) {
+export function Stepper({
+  label,
+  valuePaise,
+  stepPaise,
+  min,
+  max,
+  onChange,
+  onPressValue,
+  testID,
+}: StepperProps) {
   const step = formatRupees(stepPaise);
   const canLess = valuePaise > min;
   const canMore = valuePaise < max;
   return (
     <View style={{ gap: spacing.sm }} testID={testID}>
       <Text variant="label">{label}</Text>
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.md }}>
-        <RoundButton label={`Save ${step} less`} icon="minus" disabled={!canLess} onPress={() => onChange(Math.max(min, valuePaise - stepPaise))} />
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: spacing.md,
+        }}
+      >
+        <RoundButton
+          label={`Save ${step} less`}
+          icon="minus"
+          disabled={!canLess}
+          onPress={() => onChange(Math.max(min, valuePaise - stepPaise))}
+        />
         <Pressable
           accessibilityRole={onPressValue ? "button" : "text"}
-          accessibilityLabel={onPressValue ? `${label}, ${formatRupees(valuePaise)}, tap to type an amount` : undefined}
+          accessibilityLabel={
+            onPressValue ? `${label}, ${formatRupees(valuePaise)}, tap to type an amount` : undefined
+          }
           onPress={onPressValue}
           disabled={!onPressValue}
           style={{ minHeight: touchTarget, justifyContent: "center" }}
@@ -37,13 +60,28 @@ export function Stepper({ label, valuePaise, stepPaise, min, max, onChange, onPr
             {formatRupees(valuePaise)}
           </Text>
         </Pressable>
-        <RoundButton label={`Save ${step} more`} icon="plus" disabled={!canMore} onPress={() => onChange(Math.min(max, valuePaise + stepPaise))} />
+        <RoundButton
+          label={`Save ${step} more`}
+          icon="plus"
+          disabled={!canMore}
+          onPress={() => onChange(Math.min(max, valuePaise + stepPaise))}
+        />
       </View>
     </View>
   );
 }
 
-function RoundButton({ label, icon, disabled, onPress }: { label: string; icon: "plus" | "minus"; disabled: boolean; onPress: () => void }) {
+function RoundButton({
+  label,
+  icon,
+  disabled,
+  onPress,
+}: {
+  label: string;
+  icon: "plus" | "minus";
+  disabled: boolean;
+  onPress: () => void;
+}) {
   return (
     <Pressable
       accessibilityRole="button"

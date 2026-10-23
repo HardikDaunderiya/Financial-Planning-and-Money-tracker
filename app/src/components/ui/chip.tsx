@@ -3,7 +3,13 @@ import { Pressable } from "react-native";
 import { colors, radius, spacing, touchTarget } from "@/theme";
 import { Text } from "./text";
 
-export type ChipProps = { label: string; selected?: boolean; onPress: () => void; icon?: React.ReactNode; testID?: string };
+export type ChipProps = {
+  label: string;
+  selected?: boolean;
+  onPress: () => void;
+  icon?: React.ReactNode;
+  testID?: string;
+};
 
 /** A selectable pill. Selected: 2px ink border (design.md). */
 export function Chip({ label, selected = false, onPress, icon, testID }: ChipProps) {

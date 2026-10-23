@@ -1,6 +1,7 @@
 package in.gullak.budget;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -10,15 +11,24 @@ import com.jayway.jsonpath.JsonPath;
 import in.gullak.support.ApiTest;
 import in.gullak.support.TestUser;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.ResultActions;
 
 class TodayApiTest extends ApiTest {
+    @Autowired CycleRepository cycleRepository;
+    @Autowired PlatformTransactionManager txManager;
     // 23 Oct 2026, 09:12 IST and 13:00 IST
     static final Instant COFFEE = Instant.parse("2026-10-23T03:42:00Z");
     static final Instant ZEPTO = Instant.parse("2026-10-23T07:30:00Z");
@@ -153,22 +163,80 @@ class TodayApiTest extends ApiTest {
     }
 
     @Test
-    void concurrentFirstRequestsCreateOneCycle() throws Exception { // Review focus
+    void concurrentFirstRequestsCreateOneCycle() throws Exception { // Review focus, I-1
         TestUser u = exampleUser();
         ExecutorService pool = Executors.newFixedThreadPool(4);
-        Callable<Integer> call = () -> today(u).andReturn().getResponse().getStatus();
-        List<Integer> statuses = pool.invokeAll(List.of(call, call, call, call)).stream()
-            .map(f -> {
-                try {
-                    return f.get();
-                } catch (InterruptedException | java.util.concurrent.ExecutionException e) {
-                    throw new IllegalStateException(e);
-                }
-            })
-            .toList();
-        pool.shutdown();
-        assertThat(statuses).containsOnly(200);
+        try {
+            CountDownLatch start = new CountDownLatch(1);
+            Callable<Integer> call = () -> {
+                start.await();
+                return today(u).andReturn().getResponse().getStatus();
+            };
+            List<java.util.concurrent.Future<Integer>> futures = List.of(call, call, call, call).stream()
+                .map(pool::submit).toList();
+            start.countDown();
+            List<Integer> statuses = futures.stream()
+                .map(f -> {
+                    try {
+                        return f.get();
+                    } catch (InterruptedException | java.util.concurrent.ExecutionException e) {
+                        throw new IllegalStateException(e);
+                    }
+                })
+                .toList();
+            assertThat(statuses).containsOnly(200);
+            assertThat(cycleCount(u)).isEqualTo(1);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void overlappingCycleInsertIsIgnoredAndHomeStillLoads() throws Exception { // I-1
+        TestUser u = exampleUser();
+        today(u).andExpect(status().isOk()).andExpect(jsonPath("$.cycleStart").value("2026-10-01"));
+        // A racing request that read a different payday would insert 15 Oct - 14 Nov.
+        Integer inserted = new TransactionTemplate(txManager).execute(tx -> cycleRepository.insertIfAbsent(
+            UUID.randomUUID(), u.id(), LocalDate.of(2026, 10, 15), LocalDate.of(2026, 11, 14)));
+        assertThat(inserted).isZero();
         assertThat(cycleCount(u)).isEqualTo(1);
+        today(u).andExpect(status().isOk())
+            .andExpect(jsonPath("$.cycleStart").value("2026-10-01"))
+            .andExpect(jsonPath("$.cycleEnd").value("2026-10-31"));
+    }
+
+    @Test
+    void databaseRejectsOverlappingCyclesForOneUserOnly() throws Exception { // I-1
+        TestUser u = exampleUser();
+        TestUser other = exampleUser();
+        today(u).andExpect(status().isOk());
+        assertThatThrownBy(() -> insertCycle(u, "2026-10-31", "2026-11-30"))
+            .isInstanceOf(DataIntegrityViolationException.class);
+        insertCycle(u, "2026-11-01", "2026-11-30"); // adjacent, not overlapping
+        insertCycle(other, "2026-10-15", "2026-11-14"); // another user's dates are independent
+        today(u).andExpect(status().isOk());
+    }
+
+    @Test
+    void findCoveringPicksTheLatestStartIfTheConstraintEverFails() throws Exception { // I-1 defence in depth
+        TestUser u = exampleUser();
+        today(u).andExpect(status().isOk());
+        new TransactionTemplate(txManager).executeWithoutResult(tx -> {
+            // Postgres DDL is transactional: the constraint is back once this rolls back.
+            jdbc.sql("alter table cycles drop constraint cycles_no_overlap").update();
+            insertCycle(u, "2026-10-15", "2026-11-14");
+            assertThat(cycleRepository.findCovering(u.id(), LocalDate.of(2026, 10, 23)))
+                .map(CycleEntity::toCycle)
+                .contains(new Cycle(LocalDate.of(2026, 10, 15), LocalDate.of(2026, 11, 14)));
+            tx.setRollbackOnly();
+        });
+        assertThat(cycleCount(u)).isEqualTo(1);
+    }
+
+    private void insertCycle(TestUser u, String start, String end) {
+        jdbc.sql("insert into cycles (id, user_id, start_date, end_date) values (?, ?, ?, ?)")
+            .params(UUID.randomUUID(), u.id(), LocalDate.parse(start), LocalDate.parse(end))
+            .update();
     }
 
     @Test

@@ -344,7 +344,7 @@ gullak/
 - One `@RestControllerAdvice` turns exceptions into `{code, message}` with the right status. Business errors are typed exceptions with a code from one enum shared with the app.
 - `@Transactional` on service methods that write; read-only methods marked `readOnly = true`.
 - Spring Data JPA (entities and repositories per feature) for ordinary reads and writes; JdbcClient or native queries for aggregate queries (budget totals, insights, matching), tested against real Postgres. Schema is owned by Flyway; Hibernate only validates it.
-- Flyway owns the schema. No `ddl-auto`. Every migration is forward-only and reviewed.
+- Hibernate only validates the schema (`ddl-auto: validate`); Flyway owns it. Every migration is forward-only and reviewed.
 - Configuration through `application.yml` and environment variables. Secrets never in the repository.
 - Scheduled jobs (daily close, off-track push, draft cleanup) are idempotent, keyed by (user, date), and use a database lock so two instances cannot run the same job.
 - Actuator exposes `health` only, unauthenticated, for the platform's checks.

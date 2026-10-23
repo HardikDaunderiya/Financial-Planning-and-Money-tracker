@@ -11,9 +11,10 @@ cd server
 ./gradlew test            # all tests, Postgres in Testcontainers
 ```
 
-Run locally:
+Run locally (export `GULLAK_DB_PASSWORD` first: both the database container and the `local` profile read it):
 
 ```bash
+export GULLAK_DB_PASSWORD=$(openssl rand -base64 24)
 docker run -d --name gullak-db -e POSTGRES_DB=gullak -e POSTGRES_USER=gullak \
   -e POSTGRES_PASSWORD=$GULLAK_DB_PASSWORD -p 5432:5432 postgres:17
 export GULLAK_JWT_SECRET=$(openssl rand -base64 48)
@@ -22,6 +23,21 @@ export GULLAK_OTP_PEPPER=$(openssl rand -base64 48)
 ```
 
 Secrets come only from environment variables. Never commit them.
+
+### Configuration
+
+Every environment variable the server reads:
+
+| Variable | Used by | Required | Notes |
+|---|---|---|---|
+| `SPRING_PROFILES_ACTIVE` | all | yes | `prod` in production; on a laptop pass `--spring.profiles.active=local` as below. With no profile there is no mailer and no datasource, so startup fails. |
+| `GULLAK_DB_PASSWORD` | `local` profile | local | Password for the `gullak` user on `localhost:5432/gullak`. |
+| `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD` | `prod` profile | prod | The production Postgres 17 database. Only `local` sets a datasource in YAML. |
+| `GULLAK_JWT_SECRET` | all | yes | Signs access tokens (HS256). At least 32 characters, or startup fails. |
+| `GULLAK_OTP_PEPPER` | all | yes | HMAC key for stored OTP codes. At least 32 characters, or startup fails. Changing it invalidates codes in flight. |
+| `GULLAK_TRUSTED_PROXIES` | all | prod | Regex of the load balancer addresses allowed to set `X-Forwarded-For`. Empty (the default) trusts no proxy, which is right on a laptop. **`prod` refuses to start when it is empty**: behind a load balancer every user would share the balancer's IP, and the per-IP OTP limit would become one cap for the whole app. |
+
+The `prod` profile also needs a real OTP mailer. Until one exists (Plan 8) it fails at startup by design.
 
 ### API so far (Plan 1)
 

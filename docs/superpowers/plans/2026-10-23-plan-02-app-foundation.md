@@ -12,6 +12,7 @@
 
 ## Global Constraints
 
+- Migrations for this plan use V005 only (Plan 1 used V001–V004); if an earlier plan was executed with more migrations than planned, renumber to the next free number below V006.
 - TypeScript strict; no `any`; no non-null assertions outside tests; `@/*` maps to `app/src/*`.
 - Money is paise as integers (`number`, always whole). The app never does budget arithmetic except the display-only first-cycle preview in `lib/budget.ts`, which mirrors the server formula and is tested against the same numbers (BUD-32). Formatting only through `lib/money.ts` (`₹1,00,000`, Indian grouping, whole rupees) and `lib/dates.ts` (`Fri, 23 Oct`).
 - Features never call `fetch`. `src/lib/api.ts` is the only reader of HTTP responses and the only place that knows URLs, tokens and error codes. It produces `ApiError`, `NetworkError` or `UnknownError`; nothing else reaches a screen.

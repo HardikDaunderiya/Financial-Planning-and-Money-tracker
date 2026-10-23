@@ -57,6 +57,18 @@ describe("UI primitives (APP-29)", () => {
     expect(screen.getByLabelText("Save ₹1,000 more")).toBeTruthy();
   });
 
+  it("Stepper allows a step that lands between the value and max, and disables at max", async () => {
+    const onChange = jest.fn();
+    const props = { label: "Save every month", stepPaise: 100000, min: 0, max: 3500000, onChange };
+    const { rerender } = await render(<Stepper {...props} valuePaise={3450000} />);
+    const more = screen.getByLabelText("Save ₹1,000 more");
+    expect(more).toBeEnabled();
+    await fireEvent.press(more);
+    expect(onChange).toHaveBeenCalledWith(3500000);
+    await rerender(<Stepper {...props} valuePaise={3500000} />);
+    expect(screen.getByLabelText("Save ₹1,000 more")).toBeDisabled();
+  });
+
   it("Icon is hidden from assistive tech by default", async () => {
     await render(<Icon name="home" />);
     expect(screen.getByTestId("icon-home", { includeHiddenElements: true })).toHaveProp("accessibilityElementsHidden", true);

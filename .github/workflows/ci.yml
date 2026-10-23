@@ -33,4 +33,5 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run format
+      - run: npm run gen:errors -- --check
       - run: npm test -- --ci

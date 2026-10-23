@@ -56,6 +56,7 @@
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --check .",
     "typecheck": "tsc --noEmit",
+    "pretest": "node scripts/gen-error-codes.mjs --check",
     "test": "jest",
     "gen:errors": "node scripts/gen-error-codes.mjs"
   },

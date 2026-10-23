@@ -19,8 +19,8 @@ export type StepperProps = {
 
 export function Stepper({ label, valuePaise, stepPaise, min, max, onChange, onPressValue, testID }: StepperProps) {
   const step = formatRupees(stepPaise);
-  const canLess = valuePaise - stepPaise >= min;
-  const canMore = valuePaise + stepPaise <= max;
+  const canLess = valuePaise > min;
+  const canMore = valuePaise < max;
   return (
     <View style={{ gap: spacing.sm }} testID={testID}>
       <Text variant="label">{label}</Text>

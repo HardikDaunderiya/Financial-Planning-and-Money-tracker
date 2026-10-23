@@ -53,3 +53,18 @@ The `prod` profile also needs a real OTP mailer. Until one exists (Plan 8) it fa
 | GET | /api/v1/budget/today | `date, budgetPaise, spentPaise, leftPaise, overPaise, poolOverPaise, mood, line, daysLeft, cycleStart, cycleEnd` |
 
 All amounts are paise, sent as JSON numbers (strings are rejected). Request bodies over 64 KB are 413 `TOO_LARGE`. Errors are `{code, message}`; see `server/src/main/java/in/gullak/common/error/ErrorCode.java`.
+
+## App
+
+Expo SDK 58 (Expo Router, TypeScript strict). Requirements: Node 22, and for phones the Expo Go app or a development build.
+
+```bash
+cd app
+cp .env.example .env        # point EXPO_PUBLIC_API_URL at the server
+npm install
+npm run start               # press a for Android, i for iOS, w for web
+npm test                    # Jest + React Native Testing Library
+npm run lint && npm run typecheck
+```
+
+The server must be running with the `local` profile (above). Sign-in codes in local development come from `POST /api/v1/auth/dev/otp` (Plan 2, Task 5), which only exists under that profile.

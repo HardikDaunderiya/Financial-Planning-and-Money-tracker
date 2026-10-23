@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import in.gullak.budget.BudgetCalculator;
 import in.gullak.budget.BudgetInput;
 import in.gullak.budget.DailyBudget;
-import in.gullak.budget.Mood;
 import in.gullak.profile.Personality;
 import org.junit.jupiter.api.Test;
 
@@ -32,19 +31,32 @@ class GullakLinesTest {
         return b;
     }
 
+    /** Feeds the line exactly as BudgetService does. */
+    static String line(Personality p, DailyBudget b) {
+        return GullakLines.line(p, b.mood(), b.leftPaise(), b.totalOverPaise());
+    }
+
+    @Test
+    void placeholdersTakeTheFiguresGiven() {
+        assertThat(GullakLines.line(Personality.SAVAGE, Mood.FAINTED, 0, 50_000))
+            .isEqualTo("Over by ₹500. Swiggy again? I’m going to lie down.");
+        assertThat(GullakLines.line(Personality.MOM, Mood.HAPPY, 166_600, 0))
+            .isEqualTo("₹1,666 left, beta. Ghar ka khana tonight, okay?");
+    }
+
     @Test
     void chillHappyLineMatchesTheMockup() {
-        assertThat(GullakLines.line(Personality.CHILL, HAPPY)).isEqualTo("₹413 left for today. Nice and steady.");
+        assertThat(line(Personality.CHILL, HAPPY)).isEqualTo("₹413 left for today. Nice and steady.");
     }
 
     @Test
     void chillOverLineMatchesTheMockup() {
-        assertThat(GullakLines.line(Personality.CHILL, OVER)).isEqualTo("Over by ₹127. Happens. Tomorrow’s a fresh start.");
+        assertThat(line(Personality.CHILL, OVER)).isEqualTo("Over by ₹127. Happens. Tomorrow’s a fresh start.");
     }
 
     @Test
     void poolGoneUsesThePoolOverspend() {
-        assertThat(GullakLines.line(Personality.CHILL, POOL_GONE)).startsWith("Over by ₹400.");
+        assertThat(line(Personality.CHILL, POOL_GONE)).startsWith("Over by ₹400.");
     }
 
     @Test
@@ -52,19 +64,19 @@ class GullakLinesTest {
         DailyBudget b = BudgetCalculator.compute(new BudgetInput(5_000_000, 1_500_000, 2_000_000, 1_540_000, 10_000, 11));
         assertThat(b.overPaise()).isEqualTo(10_000);
         assertThat(b.poolOverPaise()).isEqualTo(40_000);
-        assertThat(GullakLines.line(Personality.CHILL, b)).startsWith("Over by ₹500.");
+        assertThat(line(Personality.CHILL, b)).startsWith("Over by ₹500.");
     }
 
     @Test
     void hypeCalmLineHasNoFullStopOnItsSingleSentence() {
-        assertThat(GullakLines.line(Personality.HYPE, withMood(Mood.CALM))).isEqualTo("₹400 left and you’re cruising");
+        assertThat(line(Personality.HYPE, withMood(Mood.CALM))).isEqualTo("₹400 left and you’re cruising");
     }
 
     @Test
     void everyPersonalityHasEveryMood() { // APP-12 (server side)
         for (Personality p : Personality.values()) {
             for (Mood mood : Mood.values()) {
-                String line = GullakLines.line(p, withMood(mood));
+                String line = line(p, withMood(mood));
                 assertThat(line).as("%s / %s", p, mood).isNotBlank().doesNotContain("{");
             }
         }

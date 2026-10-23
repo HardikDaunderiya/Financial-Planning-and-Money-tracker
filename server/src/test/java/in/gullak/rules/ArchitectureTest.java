@@ -3,6 +3,7 @@ package in.gullak.rules;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noFields;
+import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
 
 import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.Dependency;
@@ -67,4 +68,11 @@ class ArchitectureTest {
         .that().resideInAPackage("in.gullak.common..")
         .should().dependOnClassesThat()
         .resideInAnyPackage("in.gullak.auth..", "in.gullak.profile..", "in.gullak.budget..", "in.gullak.content..");
+
+    /**
+     * Spec 4.1: feature boundaries stay clear enough to split later, so top-level packages never depend on
+     * each other in a cycle. Tests and the archfixture package are outside the import, so they never count.
+     */
+    @ArchTest
+    static final ArchRule featuresAreFreeOfCycles = slices().matching("in.gullak.(*)..").should().beFreeOfCycles();
 }

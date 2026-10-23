@@ -41,7 +41,7 @@ public class BudgetService {
         DailyBudget b = BudgetCalculator.compute(new BudgetInput(
             profile.incomePaise(), fixedCosts.totalFor(userId), profile.savingsPaise(), before, spentToday, daysLeft));
         return new TodayResponse(today, b.budgetPaise(), b.spentTodayPaise(), b.leftPaise(), b.overPaise(),
-            b.poolOverPaise(), b.mood(), GullakLines.line(profile.personality(), b), daysLeft,
+            b.poolOverPaise(), b.mood(), GullakLines.line(profile.personality(), b.mood(), b.leftPaise(), b.totalOverPaise()), daysLeft,
             cycle.start(), cycle.end());
     }
 }

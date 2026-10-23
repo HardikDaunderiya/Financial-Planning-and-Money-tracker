@@ -1,5 +1,7 @@
 package in.gullak.budget;
 
+import in.gullak.content.Mood;
+
 /** The money rules of spec section 2.1. Pure: no clock, no database. */
 public final class BudgetCalculator {
     private BudgetCalculator() {}

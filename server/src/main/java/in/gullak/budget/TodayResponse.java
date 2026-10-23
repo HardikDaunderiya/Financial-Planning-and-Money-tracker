@@ -1,5 +1,6 @@
 package in.gullak.budget;
 
+import in.gullak.content.Mood;
 import java.time.LocalDate;
 
 public record TodayResponse(

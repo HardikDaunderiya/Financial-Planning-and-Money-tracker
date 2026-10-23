@@ -1,7 +1,5 @@
 package in.gullak.content;
 
-import in.gullak.budget.DailyBudget;
-import in.gullak.budget.Mood;
 import in.gullak.common.money.RupeeFormat;
 import in.gullak.profile.Personality;
 import java.util.EnumMap;
@@ -39,11 +37,14 @@ public final class GullakLines {
 
     private GullakLines() {}
 
-    public static String line(Personality personality, DailyBudget b) {
-        long over = b.overPaise() + b.poolOverPaise();
-        return LINES.get(personality).get(b.mood())
-            .replace("{left}", RupeeFormat.format(b.leftPaise()))
-            .replace("{over}", RupeeFormat.format(over));
+    /**
+     * @param leftPaise what is left of today's budget
+     * @param overPaise the full overspend to show: today's plus any pool deficit
+     */
+    public static String line(Personality personality, Mood mood, long leftPaise, long overPaise) {
+        return LINES.get(personality).get(mood)
+            .replace("{left}", RupeeFormat.format(leftPaise))
+            .replace("{over}", RupeeFormat.format(overPaise));
     }
 
     private static void put(Personality p, String happy, String calm, String nervous, String fainted) {

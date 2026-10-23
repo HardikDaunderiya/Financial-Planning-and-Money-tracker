@@ -69,6 +69,7 @@ Rules:
 - Money not spent today stays in the pool, so tomorrow's budget rises a little. Overspending lowers it. Nothing resets mid-cycle.
 - If the pool goes below zero, the daily budget is ₹0 until payday, the Gullak faints, and the catch-up plan appears.
 - Fixed costs and transfers to savings or SIPs never count against the daily budget, even when they appear in a statement.
+- The first cycle after setup usually starts mid-cycle. Its spendable amount is pro-rated: monthly spendable × days left including today ÷ days in the cycle, rounded down to whole rupees. Setup asks "How much money do you have left until payday?" pre-filled with that figure, and the user's answer replaces it for this first cycle only. (Built in Plan 2 with Home first run.)
 - A big one-off spend (for example a ₹15,000 flight) can be marked "spread over the cycle". It reduces the pool but is left out of today's spent figure, so one purchase does not faint the Gullak.
 - Extra income (bonus, refund of a deposit) is a credit the user assigns: to savings, to the pool, or split.
 - At cycle close, money left in the pool becomes "extra saved" and is added to savings (see 2.2). The user can instead roll it into the next cycle from the cycle summary.

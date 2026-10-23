@@ -24,7 +24,15 @@ export const persister = createAsyncStoragePersister({
   key: "gullak.query-cache",
 });
 
-export const persistOptions = { persister, maxAge: WEEK };
+/** Only settled, non-auth queries are written to disk, so nothing token-bearing is ever persisted. */
+export const persistOptions = {
+  persister,
+  maxAge: WEEK,
+  dehydrateOptions: {
+    shouldDehydrateQuery: (query: { state: { status: string }; queryKey: readonly unknown[] }) =>
+      query.state.status === "success" && query.queryKey[0] !== "auth",
+  },
+};
 
 export function wireOnlineManager(): void {
   onlineManager.setEventListener((setOnline) =>

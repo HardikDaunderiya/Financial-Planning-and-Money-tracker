@@ -4,6 +4,8 @@ import { Text } from "react-native";
 import { SessionProvider, useSession } from "./session";
 import type { TokenStore, Tokens } from "@/lib/storage";
 import { NetworkError } from "@/lib/api-errors";
+import { authEvents } from "@/lib/client";
+import { queryClient } from "@/lib/query";
 
 function store(initial: Tokens | null): TokenStore & { tokens: Tokens | null } {
   const s = {
@@ -71,5 +73,21 @@ describe("session", () => {
     expect(logout).toHaveBeenCalledWith("R");
     expect(s.tokens).toBeNull();
     expect(screen.getByTestId("status")).toHaveTextContent("signedOut");
+  });
+
+  it("a rejected refresh moves the session to signedOut and clears the query cache", async () => {
+    queryClient.setQueryData(["budget"], { budgetPaise: 1 });
+    await render(
+      <SessionProvider
+        store={store({ accessToken: "A", refreshToken: "R" })}
+        logout={() => Promise.resolve()}
+      >
+        <Probe />
+      </SessionProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("signedIn"));
+    await act(() => Promise.resolve(authEvents.emitSignedOut()));
+    expect(screen.getByTestId("status")).toHaveTextContent("signedOut");
+    expect(queryClient.getQueryData(["budget"])).toBeUndefined();
   });
 });

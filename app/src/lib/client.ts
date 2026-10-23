@@ -6,6 +6,10 @@ if (!baseUrl) {
   throw new Error("EXPO_PUBLIC_API_URL is not set; copy app/.env.example to app/.env");
 }
 
+if (!__DEV__ && !baseUrl.startsWith("https:")) {
+  throw new Error("EXPO_PUBLIC_API_URL must be https in release builds");
+}
+
 type Listener = () => void;
 const signedOutListeners = new Set<Listener>();
 
@@ -15,10 +19,13 @@ export const authEvents = {
     signedOutListeners.add(listener);
     return () => signedOutListeners.delete(listener);
   },
+  emitSignedOut(): void {
+    signedOutListeners.forEach((l) => l());
+  },
 };
 
 export const api = createApi({
   baseUrl,
   tokens: tokenStore,
-  onSignedOut: () => signedOutListeners.forEach((l) => l()),
+  onSignedOut: () => authEvents.emitSignedOut(),
 });

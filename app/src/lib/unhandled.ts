@@ -15,6 +15,8 @@ export type GlobalHandlerDeps = {
   log: { error: (event: string, data?: Record<string, unknown>) => void };
   hermes: Hermes | null;
   errorUtils: ErrorUtilsLike | null;
+  /** True in development builds: React Native's own tracker (LogBox) stays in place. */
+  dev?: boolean;
   addEventListener?: ((name: "unhandledrejection", fn: (e: { reason: unknown }) => void) => void) | undefined;
 };
 
@@ -33,16 +35,25 @@ function detect(): GlobalHandlerDeps {
     log: defaultLog,
     hermes: g.HermesInternal ?? null,
     errorUtils: g.ErrorUtils ?? null,
+    dev: __DEV__,
     addEventListener:
       typeof g.addEventListener === "function" ? g.addEventListener.bind(globalThis) : undefined,
   };
 }
 
 /** ERR-18: unhandled rejections and uncaught errors are logged; the app keeps running. Call once at startup. */
-export function installGlobalHandlers(deps: GlobalHandlerDeps = detect()): void {
+let installed = false;
+
+export function installGlobalHandlers(injected?: GlobalHandlerDeps): void {
+  if (!injected) {
+    if (installed) return;
+    installed = true;
+  }
+  const deps = injected ?? detect();
   const onUnhandled = (reason: unknown) =>
     deps.log.error("promise.unhandled", { message: messageOf(reason) });
-  if (deps.hermes?.enablePromiseRejectionTracker) {
+  // Hermes has no getter for the previous tracker, so in development we leave React Native's in place.
+  if (deps.hermes?.enablePromiseRejectionTracker && !deps.dev) {
     deps.hermes.enablePromiseRejectionTracker({
       allRejections: true,
       onUnhandled: (_id, reason) => onUnhandled(reason),
@@ -54,7 +65,7 @@ export function installGlobalHandlers(deps: GlobalHandlerDeps = detect()): void 
   if (deps.errorUtils) {
     const previous = deps.errorUtils.getGlobalHandler();
     deps.errorUtils.setGlobalHandler((e, isFatal) => {
-      deps.log.error("js.uncaught", { message: e.message, fatal: !!isFatal });
+      deps.log.error("js.uncaught", { message: messageOf(e), fatal: !!isFatal });
       previous?.(e, isFatal);
     });
   }

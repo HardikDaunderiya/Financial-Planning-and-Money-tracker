@@ -20,14 +20,128 @@ export type Api = {
   del<T>(path: string, options?: RequestOptions): Promise<T>;
 };
 
+export type SessionControl = {
+  /** The stored pair, or null when signed out. */
+  current(): Promise<Tokens | null>;
+  /** Replaces any session: waits out an in-flight refresh so a stale pair cannot overwrite the new one. */
+  signIn(tokens: Tokens): Promise<void>;
+  /**
+   * Revokes with the freshest refresh token and clears locally. Never fails open: the local pair is
+   * cleared even when the store read or the server call fails. `onCleared` fires before the server call.
+   */
+  signOut(logout: (refreshToken: string) => Promise<void>, onCleared?: () => void): Promise<void>;
+};
+
+export type TokenOwner = SessionControl & {
+  generation(): number;
+  inflight(): Promise<Tokens> | null;
+  setInflight(p: Promise<Tokens> | null): void;
+  isSigningOut(): boolean;
+  /** A sign-out is waiting: remember the pair the server just issued so logout revokes the live token. */
+  noteRotated(next: Tokens): void;
+  /** Saves a refreshed pair only if nothing changed the session since the refresh started. */
+  saveRefreshed(next: Tokens, used: Tokens, startGeneration: number): Promise<boolean>;
+  /** Clears the session if it is still the one that was rejected. True when this call cleared it. */
+  endSession(used: Tokens, startGeneration: number): Promise<boolean>;
+  load(): Promise<Tokens | null>;
+};
+
+const SETTLE_MS = 10;
+
+/** Owns the stored pair and a generation counter that every change bumps (refresh races, spec 4.7). */
+export function createTokenOwner(store: TokenStore): TokenOwner {
+  let generation = 0;
+  let inflight: Promise<Tokens> | null = null;
+  let signingOut = false;
+  const held: { rotated: Tokens | null } = { rotated: null };
+  const rotatedToken = (): string | null => held.rotated?.refreshToken ?? null;
+
+  const sameSession = async (used: Tokens) => {
+    const now = await store.load();
+    return now !== null && now.refreshToken === used.refreshToken;
+  };
+  const waitForRefresh = async () => {
+    if (inflight) await inflight.catch(() => undefined);
+  };
+
+  return {
+    generation: () => generation,
+    inflight: () => inflight,
+    setInflight: (p) => {
+      inflight = p;
+    },
+    isSigningOut: () => signingOut,
+    noteRotated: (next) => {
+      held.rotated = next;
+    },
+    load: () => store.load(),
+    current: () => store.load(),
+    async saveRefreshed(next, used, startGeneration) {
+      if (generation !== startGeneration || !(await sameSession(used))) return false;
+      await store.save(next);
+      generation += 1;
+      return true;
+    },
+    async endSession(used, startGeneration) {
+      if (generation !== startGeneration || !(await sameSession(used))) return false;
+      generation += 1;
+      await store.clear();
+      return true;
+    },
+    async signIn(tokens) {
+      generation += 1;
+      await waitForRefresh();
+      await store.save(tokens);
+      generation += 1;
+    },
+    async signOut(logout, onCleared) {
+      signingOut = true;
+      held.rotated = null;
+      try {
+        generation += 1;
+        await waitForRefresh();
+        // Let a write that raced the tap land, so logout carries the freshest token.
+        await new Promise<void>((r) => setTimeout(r, SETTLE_MS));
+        let refreshToken: string | null = rotatedToken();
+        try {
+          refreshToken = rotatedToken() ?? (await store.load())?.refreshToken ?? null;
+        } catch (e) {
+          log.warn("session.read_failed", { reason: e instanceof Error ? e.name : "unknown" });
+        }
+        generation += 1;
+        await store.clear();
+        onCleared?.();
+        if (refreshToken) {
+          try {
+            await logout(refreshToken);
+          } catch (e) {
+            // Local sign-out already happened; the server token expires on its own.
+            log.warn(e instanceof NetworkError ? "auth.logout_offline" : "auth.logout_rejected", {
+              reason: e instanceof Error ? e.name : "unknown",
+            });
+          }
+        }
+      } finally {
+        signingOut = false;
+      }
+    },
+  };
+}
+
 export type ApiDeps = {
   baseUrl: string;
   tokens: TokenStore;
-  /** Called once when a refresh is rejected: the session is gone. */
+  /** Called once when the session is gone: a refresh was rejected or the server said UNAUTHENTICATED. */
   onSignedOut: () => void;
   fetchFn?: typeof fetch;
   timeoutMs?: number;
 };
+
+export type ApiWithSession = Api & { session: SessionControl };
+
+const MESSAGE_MAX = 300;
+const FIELDS_MAX = 20;
+const SESSION_ENDING_CODES = new Set(["TOKEN_EXPIRED", "TOKEN_REUSED", "UNAUTHENTICATED"]);
 
 type ErrorBody = { code?: unknown; message?: unknown; fields?: unknown; errorId?: unknown };
 
@@ -49,13 +163,38 @@ function isFieldError(f: unknown): f is FieldError {
 
 function fieldsOf(raw: unknown): FieldError[] {
   if (!Array.isArray(raw)) return [];
-  return (raw as unknown[]).filter(isFieldError).map((f) => ({ field: f.field, message: f.message }));
+  return (raw as unknown[])
+    .filter(isFieldError)
+    .slice(0, FIELDS_MAX)
+    .map((f) => ({ field: f.field.slice(0, 100), message: f.message.slice(0, MESSAGE_MAX) }));
 }
 
-export function createApi(deps: ApiDeps): Api {
+function abortError(): Error {
+  return Object.assign(new Error("aborted"), { name: "AbortError" });
+}
+
+function codeOf(data: unknown): unknown {
+  return typeof data === "object" && data !== null ? (data as ErrorBody).code : undefined;
+}
+
+function toError(status: number, data: unknown): Error {
+  const b = (typeof data === "object" && data !== null ? data : {}) as ErrorBody;
+  if (typeof b.code === "string") {
+    return new ApiError(
+      b.code,
+      status,
+      typeof b.message === "string" ? b.message.slice(0, MESSAGE_MAX) : "",
+      fieldsOf(b.fields),
+      typeof b.errorId === "string" ? b.errorId.slice(0, 100) : undefined,
+    );
+  }
+  return new UnknownError(`HTTP ${status}`, status);
+}
+
+export function createApi(deps: ApiDeps): ApiWithSession {
   const fetchFn = deps.fetchFn ?? fetch;
   const timeoutMs = deps.timeoutMs ?? 15_000;
-  let refreshing: Promise<Tokens> | null = null;
+  const owner = createTokenOwner(deps.tokens);
 
   async function send(
     method: HttpMethod,
@@ -64,6 +203,7 @@ export function createApi(deps: ApiDeps): Api {
     accessToken: string | null,
     signal?: AbortSignal,
   ): Promise<{ status: number; data: unknown }> {
+    if (signal?.aborted) throw abortError();
     const headers: Record<string, string> = {
       Accept: "application/json",
       "Content-Type": "application/json",
@@ -71,52 +211,56 @@ export function createApi(deps: ApiDeps): Api {
     };
     if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    signal?.addEventListener("abort", () => controller.abort());
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
+    const onAbort = () => controller.abort();
+    signal?.addEventListener("abort", onAbort, { once: true });
+    const aborted = new Promise<never>((_, reject) => {
+      controller.signal.addEventListener("abort", () => reject(abortError()), { once: true });
+    });
+    aborted.catch(() => undefined);
     const started = Date.now();
-    let res: { status: number; headers: { get(name: string): string | null }; text(): Promise<string> };
     try {
-      res = await fetchFn(`${deps.baseUrl}${path}`, {
-        method,
-        headers,
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        signal: controller.signal,
-      });
-    } catch (e) {
+      let status: number;
+      let contentType: string;
+      let text: string;
+      try {
+        const res = await Promise.race([
+          fetchFn(`${deps.baseUrl}${path}`, {
+            method,
+            headers,
+            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+            signal: controller.signal,
+          }),
+          aborted,
+        ]);
+        status = res.status;
+        contentType = res.headers.get("content-type") ?? "";
+        text = await Promise.race([res.text(), aborted]);
+      } catch (e) {
+        if (signal?.aborted) throw e;
+        throw new NetworkError(timedOut ? "timeout" : "network");
+      }
+      log.info("api.call", { route: routeOf(path), method, status, ms: Date.now() - started });
+      if (status === 204 || text === "") return { status, data: undefined };
+      if (!contentType.includes("application/json")) {
+        throw new UnknownError(`Unexpected ${contentType.slice(0, 50) || "response"}`, status);
+      }
+      try {
+        return { status, data: JSON.parse(text) as unknown };
+      } catch {
+        throw new UnknownError("Response was not JSON", status);
+      }
+    } finally {
       clearTimeout(timer);
-      if (signal?.aborted) throw e;
-      throw new NetworkError(e instanceof Error && e.name === "AbortError" ? "timeout" : "network");
-    }
-    clearTimeout(timer);
-    const text = await res.text();
-    log.info("api.call", { route: routeOf(path), method, status: res.status, ms: Date.now() - started });
-    if (res.status === 204 || text === "") return { status: res.status, data: undefined };
-    const contentType = res.headers.get("content-type") ?? "";
-    if (!contentType.includes("application/json")) {
-      throw new UnknownError(`Unexpected ${contentType || "response"}`, res.status);
-    }
-    try {
-      return { status: res.status, data: JSON.parse(text) as unknown };
-    } catch {
-      throw new UnknownError("Response was not JSON", res.status);
+      signal?.removeEventListener("abort", onAbort);
     }
   }
 
-  function toError(status: number, data: unknown): Error {
-    const b = (data ?? {}) as ErrorBody;
-    if (typeof b.code === "string") {
-      return new ApiError(
-        b.code,
-        status,
-        typeof b.message === "string" ? b.message : "",
-        fieldsOf(b.fields),
-        typeof b.errorId === "string" ? b.errorId : undefined,
-      );
-    }
-    return new UnknownError(`HTTP ${status}`, status);
-  }
-
-  async function refresh(current: Tokens): Promise<Tokens> {
+  async function runRefresh(current: Tokens, startGeneration: number): Promise<Tokens> {
     const { status, data } = await send(
       "POST",
       "/auth/refresh",
@@ -125,19 +269,44 @@ export function createApi(deps: ApiDeps): Api {
     );
     if (status >= 400) {
       const err = toError(status, data);
-      if (err instanceof ApiError) {
-        await deps.tokens.clear();
-        deps.onSignedOut();
+      if (status === 401 && err instanceof ApiError && SESSION_ENDING_CODES.has(err.code)) {
+        if (await owner.endSession(current, startGeneration)) deps.onSignedOut();
       }
       throw err;
     }
-    const pair = data as Partial<Tokens>;
-    if (typeof pair.accessToken !== "string" || typeof pair.refreshToken !== "string") {
+    const pair = (typeof data === "object" && data !== null ? data : {}) as Partial<Tokens>;
+    if (
+      typeof pair.accessToken !== "string" ||
+      pair.accessToken === "" ||
+      typeof pair.refreshToken !== "string" ||
+      pair.refreshToken === ""
+    ) {
       throw new UnknownError("Refresh gave no tokens", status);
     }
     const next = { accessToken: pair.accessToken, refreshToken: pair.refreshToken };
-    await deps.tokens.save(next);
-    return next;
+    if (await owner.saveRefreshed(next, current, startGeneration)) return next;
+    // The session changed while we refreshed: drop this pair, use whatever is stored now.
+    if (owner.isSigningOut()) owner.noteRotated(next);
+    const latest = await owner.load();
+    if (!latest) throw new ApiError("UNAUTHENTICATED", 401, "");
+    return latest;
+  }
+
+  /** The pair a request that got TOKEN_EXPIRED should retry with. Never spends a refresh token twice. */
+  async function freshTokens(used: Tokens): Promise<Tokens> {
+    const running = owner.inflight();
+    if (running) return running;
+    const current = await owner.load();
+    if (!current) throw new ApiError("UNAUTHENTICATED", 401, "");
+    const raced = owner.inflight();
+    if (raced) return raced;
+    if (current.refreshToken !== used.refreshToken) return current;
+    if (owner.isSigningOut()) throw new ApiError("UNAUTHENTICATED", 401, "");
+    const p = runRefresh(current, owner.generation()).finally(() => {
+      if (owner.inflight() === p) owner.setInflight(null);
+    });
+    owner.setInflight(p);
+    return p;
   }
 
   async function request<T>(
@@ -147,14 +316,17 @@ export function createApi(deps: ApiDeps): Api {
     options: RequestOptions = {},
   ): Promise<T> {
     const auth = options.auth ?? true;
-    const stored = auth ? await deps.tokens.load() : null;
+    const stored = auth ? await owner.load() : null;
+    const startGeneration = owner.generation();
     let { status, data } = await send(method, path, body, stored?.accessToken ?? null, options.signal);
-    if (status === 401 && auth && stored && (data as ErrorBody | undefined)?.code === "TOKEN_EXPIRED") {
-      refreshing ??= refresh(stored).finally(() => {
-        refreshing = null;
-      });
-      const fresh = await refreshing;
-      ({ status, data } = await send(method, path, body, fresh.accessToken, options.signal));
+    if (status === 401 && auth && stored) {
+      const code = codeOf(data);
+      if (code === "TOKEN_EXPIRED") {
+        const fresh = await freshTokens(stored);
+        ({ status, data } = await send(method, path, body, fresh.accessToken, options.signal));
+      } else if (code === "UNAUTHENTICATED") {
+        if (await owner.endSession(stored, startGeneration)) deps.onSignedOut();
+      }
     }
     if (status >= 400) throw toError(status, data);
     return data as T;
@@ -167,5 +339,10 @@ export function createApi(deps: ApiDeps): Api {
     put: (path, body, options) => request("PUT", path, body, options),
     patch: (path, body, options) => request("PATCH", path, body, options),
     del: (path, options) => request("DELETE", path, undefined, options),
+    session: {
+      current: () => owner.current(),
+      signIn: (t) => owner.signIn(t),
+      signOut: (logout, onCleared) => owner.signOut(logout, onCleared),
+    },
   };
 }

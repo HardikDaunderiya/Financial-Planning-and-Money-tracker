@@ -1,5 +1,5 @@
 import { ApiError, NetworkError, UnknownError } from "./api-errors";
-import { createApi, type Api } from "./api";
+import { createApi, type ApiWithSession } from "./api";
 import type { TokenStore, Tokens } from "./storage";
 
 type FakeResponse = {
@@ -56,7 +56,7 @@ function setup(
     calls.push({ url, init });
     return Promise.resolve(script({ url, init }, calls.length));
   });
-  const api: Api = createApi({
+  const api: ApiWithSession = createApi({
     baseUrl: "http://test.local/api/v1",
     tokens: store,
     onSignedOut,
@@ -198,5 +198,55 @@ describe("token refresh", () => {
     await expect(api.get("/budget/today")).rejects.toBeInstanceOf(NetworkError);
     expect(store.tokens).not.toBeNull();
     expect(onSignedOut).not.toHaveBeenCalled();
+  });
+});
+
+describe("refresh races and failures", () => {
+  it("a late 401 after a settled refresh retries with the rotated pair and never spends the old refresh token twice", async () => {
+    let release: (r: FakeResponse) => void = () => undefined;
+    const late = new Promise<FakeResponse>((resolve) => (release = resolve));
+    const refreshBodies: string[] = [];
+    const { api } = setup((call) => {
+      if (call.url.endsWith("/auth/refresh")) {
+        refreshBodies.push(call.init.body as string);
+        return json(200, { accessToken: "A2", refreshToken: "R2", expiresIn: 900 });
+      }
+      if (header(call, "Authorization") === "Bearer A2") return json(200, { ok: true });
+      if (call.url.endsWith("/slow")) return late;
+      return json(401, { code: "TOKEN_EXPIRED", message: "x" });
+    });
+    const slow = api.get("/slow");
+    await new Promise<void>((r) => setImmediate(r));
+    await api.get("/fast");
+    release(json(401, { code: "TOKEN_EXPIRED", message: "x" }));
+    await expect(slow).resolves.toEqual({ ok: true });
+    expect(refreshBodies).toHaveLength(1);
+  });
+
+  it("keeps the session when the refresh answers 500", async () => {
+    const { api, store, onSignedOut } = setup((call) =>
+      call.url.endsWith("/auth/refresh")
+        ? json(500, { code: "INTERNAL", message: "boom" })
+        : json(401, { code: "TOKEN_EXPIRED", message: "x" }),
+    );
+    await expect(api.get("/budget/today")).rejects.toMatchObject({ status: 500 });
+    expect(store.tokens).toEqual({ accessToken: "A1", refreshToken: "R1" });
+    expect(onSignedOut).not.toHaveBeenCalled();
+  });
+
+  it("signOut during a refresh leaves the store empty, discards the stale pair and revokes the latest token", async () => {
+    let release: (r: FakeResponse) => void = () => undefined;
+    const gate = new Promise<FakeResponse>((resolve) => (release = resolve));
+    const { api, store } = setup((call) =>
+      call.url.endsWith("/auth/refresh") ? gate : json(401, { code: "TOKEN_EXPIRED", message: "x" }),
+    );
+    const request = api.get("/budget/today").catch(() => undefined);
+    await new Promise<void>((r) => setImmediate(r));
+    const logout = jest.fn(() => Promise.resolve());
+    const out = api.session.signOut(logout);
+    release(json(200, { accessToken: "A2", refreshToken: "R2", expiresIn: 900 }));
+    await Promise.all([request, out]);
+    expect(store.tokens).toBeNull();
+    expect(logout).toHaveBeenCalledWith("R2");
   });
 });

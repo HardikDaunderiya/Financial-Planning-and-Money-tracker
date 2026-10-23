@@ -1,9 +1,9 @@
 import React, { createContext, use, useCallback, useEffect, useMemo, useState } from "react";
-import { NetworkError } from "@/lib/api-errors";
-import { authEvents } from "@/lib/client";
+import { createTokenOwner, type SessionControl } from "@/lib/api";
+import { api, authEvents } from "@/lib/client";
 import { log } from "@/lib/log";
 import { queryClient } from "@/lib/query";
-import { tokenStore, type TokenStore, type Tokens } from "@/lib/storage";
+import type { TokenStore, Tokens } from "@/lib/storage";
 import { authApi } from "./api";
 
 export type SessionStatus = "loading" | "signedOut" | "signedIn";
@@ -18,17 +18,19 @@ const SessionContext = createContext<Session | null>(null);
 
 type Props = {
   children: React.ReactNode;
+  /** Tests inject a store; the app uses the API client's own session so token ownership stays in one place. */
   store?: TokenStore;
   logout?: (refreshToken: string) => Promise<void>;
 };
 
-export function SessionProvider({ children, store = tokenStore, logout = authApi.logout }: Props) {
+export function SessionProvider({ children, store, logout = authApi.logout }: Props) {
+  const control: SessionControl = useMemo(() => (store ? createTokenOwner(store) : api.session), [store]);
   const [status, setStatus] = useState<SessionStatus>("loading");
 
   useEffect(() => {
     let alive = true;
-    store
-      .load()
+    control
+      .current()
       .then((t) => alive && setStatus(t ? "signedIn" : "signedOut"))
       .catch((e: unknown) => {
         log.warn("session.load_failed", { reason: e instanceof Error ? e.name : "unknown" });
@@ -37,7 +39,7 @@ export function SessionProvider({ children, store = tokenStore, logout = authApi
     return () => {
       alive = false;
     };
-  }, [store]);
+  }, [control]);
 
   useEffect(
     () =>
@@ -50,30 +52,20 @@ export function SessionProvider({ children, store = tokenStore, logout = authApi
 
   const signIn = useCallback(
     async (tokens: Tokens) => {
-      await store.save(tokens);
+      await control.signIn(tokens);
       setStatus("signedIn");
       log.info("auth.signed_in");
     },
-    [store],
+    [control],
   );
 
   const signOut = useCallback(async () => {
-    const t = await store.load();
-    if (t) {
-      try {
-        await logout(t.refreshToken);
-      } catch (e) {
-        // The local sign-out still happens; the server token expires on its own within 30 days.
-        log.warn(e instanceof NetworkError ? "auth.logout_offline" : "auth.logout_rejected", {
-          reason: e instanceof Error ? e.name : "unknown",
-        });
-      }
-    }
-    await store.clear();
-    queryClient.clear();
-    setStatus("signedOut");
+    await control.signOut(logout, () => {
+      queryClient.clear();
+      setStatus("signedOut");
+    });
     log.info("auth.signed_out");
-  }, [store, logout]);
+  }, [control, logout]);
 
   const value = useMemo(() => ({ status, signIn, signOut }), [status, signIn, signOut]);
   return <SessionContext value={value}>{children}</SessionContext>;

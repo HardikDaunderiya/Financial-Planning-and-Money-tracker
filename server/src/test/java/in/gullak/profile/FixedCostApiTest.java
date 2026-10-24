@@ -1,13 +1,6 @@
 package in.gullak.profile;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import java.util.concurrent.Future;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Callable;
-import java.util.List;
-import java.util.ArrayList;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -18,6 +11,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import in.gullak.support.ApiTest;
 import in.gullak.support.TestUser;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 
@@ -110,7 +110,7 @@ class FixedCostApiTest extends ApiTest {
     void concurrentAddsCannotTogetherLeaveNothingToSpend() throws Exception { // API-FC-08 under a race
         TestUser u = signIn();
         putProfile(u, EXAMPLE_PROFILE).andExpect(status().isOk()); // ₹50,000 income, ₹20,000 savings, no fixed costs yet
-        ExecutorService pool = Executors.newFixedThreadPool(2);
+        ExecutorService pool = Executors.newFixedThreadPool(8);
         try {
             CountDownLatch start = new CountDownLatch(1);
             Callable<Integer> call = () -> {
@@ -119,13 +119,17 @@ class FixedCostApiTest extends ApiTest {
                         .content("{\"name\":\"Big\",\"amountPaise\":2000000}"))
                     .andReturn().getResponse().getStatus();
             };
-            List<Future<Integer>> futures = List.of(pool.submit(call), pool.submit(call));
+            List<Future<Integer>> futures = new ArrayList<>();
+            for (int i = 0; i < 8; i++) {
+                futures.add(pool.submit(call));
+            }
             start.countDown();
             List<Integer> statuses = new ArrayList<>();
             for (Future<Integer> f : futures) {
                 statuses.add(f.get());
             }
-            assertThat(statuses).containsExactlyInAnyOrder(201, 422); // each alone fits; together they do not
+            assertThat(statuses.stream().filter(c -> c == 201).count()).isEqualTo(1); // each alone fits; together they do not
+            assertThat(statuses.stream().filter(c -> c == 422).count()).isEqualTo(7);
         } finally {
             pool.shutdownNow();
         }

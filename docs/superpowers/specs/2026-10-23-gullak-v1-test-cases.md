@@ -46,6 +46,7 @@ Conventions:
 | BUD-30 | Daily budget is not stored | inspect schema | no column holds a daily budget; the value comes from a query |
 | BUD-31 | Whole-rupee daily budget | pool ₹1,000.50 over 3 days | budget ₹333 (33,300 paise); the 150 paise stay in the pool |
 | BUD-32 | First cycle is pro-rated | spendable ₹15,000, setup on 23 Oct, payday 1st (cycle 1–31 Oct, 9 days left) | first-cycle pool ₹4,354; budget ₹483 a day; a "money left" answer of ₹6,000 gives ₹666 a day |
+| BUD-32b | Money-left answer counts earlier spends | as BUD-32, ₹2,000 spent on 22 Oct, money left ₹6,000 | budget ₹666 a day (the pool is ₹8,000 less ₹2,000 spent) |
 
 ## 2. Goals and catch-up (unit)
 

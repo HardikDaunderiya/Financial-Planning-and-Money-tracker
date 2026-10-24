@@ -1,23 +1,24 @@
 package in.gullak.profile;
 
-import org.springframework.http.MediaType;
 import static org.assertj.core.api.Assertions.assertThat;
-import java.util.concurrent.Future;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Callable;
-import java.util.List;
-import java.util.ArrayList;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import in.gullak.support.ApiTest;
 import in.gullak.support.TestUser;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import org.springframework.http.MediaType;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.junit.jupiter.api.Test;
 
 class ProfileApiTest extends ApiTest {
 
@@ -91,6 +92,44 @@ class ProfileApiTest extends ApiTest {
             .andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.code").value("NOT_POSSIBLE"))
             .andExpect(jsonPath("$.message").value("Savings and fixed costs leave nothing to spend. Save ₹34,999 or less."));
+        mvc.perform(get("/api/v1/me/profile").with(auth(u)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("SETUP_INCOMPLETE")); // the rejected first PUT left no row behind
+    }
+
+    @Test
+    void firstProfilePutRacingFixedCostAddsNeverLeavesNothingToSpend() throws Exception { // API-FC-08 before setup
+        TestUser u = signIn();
+        ExecutorService pool = Executors.newFixedThreadPool(5);
+        try {
+            CountDownLatch start = new CountDownLatch(1);
+            List<Future<Integer>> futures = new ArrayList<>();
+            futures.add(pool.submit(() -> {
+                start.await();
+                return putProfile(u, EXAMPLE_PROFILE).andReturn().getResponse().getStatus();
+            }));
+            for (int i = 0; i < 4; i++) {
+                futures.add(pool.submit(() -> {
+                    start.await();
+                    return mvc.perform(post("/api/v1/me/fixed-costs").with(auth(u)).contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"name\":\"Big\",\"amountPaise\":2000000}"))
+                        .andReturn().getResponse().getStatus();
+                }));
+            }
+            start.countDown();
+            for (Future<Integer> f : futures) {
+                f.get();
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+        long fixed = jdbc.sql("select coalesce(sum(amount_paise),0) from fixed_costs where user_id = ? and active")
+            .param(u.id()).query(Long.class).single();
+        Long income = jdbc.sql("select income_paise - savings_paise from profiles where user_id = ?")
+            .param(u.id()).query(Long.class).optional().orElse(null);
+        if (income != null) {
+            assertThat(income - fixed).isPositive();
+        }
     }
 
     private static String withField(String override) {

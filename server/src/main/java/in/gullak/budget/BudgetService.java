@@ -1,5 +1,6 @@
 package in.gullak.budget;
 
+import in.gullak.common.error.ValidationException;
 import in.gullak.common.time.Ist;
 import in.gullak.content.GullakLines;
 import in.gullak.profile.FixedCostService;
@@ -45,7 +46,12 @@ public class BudgetService {
         LocalDate today = Ist.today(clock);
         long fixed = fixedCosts.totalFor(userId);
         CurrentCycle current = cycles.current(userId, today, profile, spendable(profile, fixed));
-        cycles.setFirstCyclePool(userId, current, moneyLeftPaise);
+        if (moneyLeftPaise > profile.incomePaise()) {
+            throw new ValidationException("moneyLeftPaise", "Can't be more than your monthly income");
+        }
+        // "Money left" is money in hand now, so the pinned pool also holds what this cycle already spent.
+        long spentSoFar = totals.spent(userId, Ist.startOf(current.cycle().start()), Ist.startOf(today.plusDays(1)));
+        cycles.setFirstCyclePool(userId, current, moneyLeftPaise + spentSoFar);
         return compute(userId, profile, today, fixed, cycles.current(userId, today, profile, spendable(profile, fixed)));
     }
 

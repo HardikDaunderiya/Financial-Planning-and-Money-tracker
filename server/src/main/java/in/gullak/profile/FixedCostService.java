@@ -34,6 +34,7 @@ public class FixedCostService {
 
     @Transactional
     FixedCost add(UUID userId, FixedCostRequest r) {
+        profiles.lockUser(userId);
         Optional<Profile> locked = profiles.lockForGuard(userId);
         long total = repo.totalActive(userId) + r.amountPaise();
         locked.ifPresent(p -> ProfileService.requireSomethingToSpend(p.incomePaise(), total, p.savingsPaise(), ProfileService.FIXED_COST_MESSAGE));
@@ -45,6 +46,7 @@ public class FixedCostService {
 
     @Transactional
     FixedCost edit(UUID userId, UUID id, FixedCostPatch p) {
+        profiles.lockUser(userId);
         Optional<Profile> locked = profiles.lockForGuard(userId);
         FixedCostEntity current = repo.findByIdAndUserIdAndActiveTrue(id, userId)
             .orElseThrow(() -> new NotFoundException("Fixed cost"));
@@ -59,6 +61,7 @@ public class FixedCostService {
 
     @Transactional
     void remove(UUID userId, UUID id) {
+        profiles.lockUser(userId);
         FixedCostEntity current = repo.findByIdAndUserIdAndActiveTrue(id, userId)
             .orElseThrow(() -> new NotFoundException("Fixed cost"));
         current.deactivate();

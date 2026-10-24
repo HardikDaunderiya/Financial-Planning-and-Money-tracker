@@ -24,6 +24,8 @@ export GULLAK_OTP_PEPPER=$(openssl rand -base64 48)
 
 Sign-in codes: `curl -X POST localhost:8080/api/v1/auth/dev/otp -H 'content-type: application/json' -d '{"email":"you@example.com"}'`.
 
+Under `local` this route is public and returns the code for any email, so never expose a local server on a shared network.
+
 Secrets come only from environment variables. Never commit them.
 
 ### Configuration

@@ -44,6 +44,9 @@ public class CycleService {
         if (cycles.insertIfAbsent(UUID.randomUUID(), userId, cycle.start(), cycle.end(), pool) == 1) {
             log.info("{} user={} days={} proRated={}", Events.CYCLE_OPENED, userId, cycle.days(), pool != null);
         }
+        // Nothing covers today after the insert only when it lost to an overlapping cycle that is not visible to
+        // this snapshot. The fallback carries an unsaved pool and a null id, so setFirstCyclePool answers
+        // FIRST_CYCLE_OVER instead of pinning a pool on a row that is not there; the next request reads the real row.
         return cycles.findCovering(userId, today)
             .map(e -> toCurrent(userId, e))
             .orElseGet(() -> new CurrentCycle(null, cycle, pool, first));

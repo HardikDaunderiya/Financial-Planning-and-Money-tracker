@@ -38,6 +38,25 @@ class FirstCycleApiTest extends ApiTest {
     }
 
     @Test
+    void moneyLeftIsWhatTheUserHasNowSoEarlierSpendsAreNotChargedTwice() throws Exception { // BUD-32
+        TestUser u = newlySetUpUser();
+        today(u);
+        seedSpend(u, 200_000, Instant.parse("2026-10-22T10:00:00Z"));
+        firstCycle(u, 600_000).andExpect(status().isOk()).andExpect(jsonPath("$.budgetPaise").value(66_600));
+        assertThat(poolOverride(u)).isEqualTo(800_000L);
+    }
+
+    @Test
+    void moneyLeftAfterASpendTodayIsSharedOverTheDaysLeft() throws Exception {
+        TestUser u = newlySetUpUser();
+        today(u);
+        seedSpend(u, 20_000, Instant.parse("2026-10-23T03:42:00Z")); // today, 09:12 IST
+        firstCycle(u, 600_000).andExpect(status().isOk())
+            .andExpect(jsonPath("$.budgetPaise").value(68_800)) // (600,000 + 20,000) / 9 = 68,888 -> Rs 688
+            .andExpect(jsonPath("$.leftPaise").value(48_800));
+    }
+
+    @Test
     void moneyLeftCanBeZero() throws Exception {
         TestUser u = newlySetUpUser();
         firstCycle(u, 0).andExpect(status().isOk()).andExpect(jsonPath("$.budgetPaise").value(0)).andExpect(jsonPath("$.mood").value("NERVOUS"));
@@ -47,10 +66,16 @@ class FirstCycleApiTest extends ApiTest {
     void moneyLeftIsValidated() throws Exception {
         TestUser u = newlySetUpUser();
         firstCycle(u, -1).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION"));
+        firstCycle(u, 10_000_000_001L).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION"));
+        mvc.perform(put("/api/v1/budget/first-cycle").with(auth(u)).contentType(MediaType.APPLICATION_JSON).content("{\"moneyLeftPaise\":6000.5}"))
+            .andExpect(status().isBadRequest());
+        firstCycle(u, 5_000_001).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION"))
+            .andExpect(jsonPath("$.fields[0].field").value("moneyLeftPaise"))
+            .andExpect(jsonPath("$.fields[0].message").value("Can't be more than your monthly income"));
         mvc.perform(put("/api/v1/budget/first-cycle").with(auth(u)).contentType(MediaType.APPLICATION_JSON).content("{\"moneyLeftPaise\":\"6000\"}"))
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION"));
         mvc.perform(put("/api/v1/budget/first-cycle").with(auth(u)).contentType(MediaType.APPLICATION_JSON).content("{}"))
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION"));
     }
 
     @Test

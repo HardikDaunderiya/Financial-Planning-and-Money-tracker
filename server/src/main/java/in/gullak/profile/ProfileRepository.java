@@ -12,6 +12,13 @@ import org.springframework.data.repository.query.Param;
 
 interface ProfileRepository extends JpaRepository<ProfileEntity, UUID> {
 
+    /**
+     * Per-user transaction-scoped advisory lock: serialises every profile and fixed-cost writer for one user,
+     * including before the profile row exists (the row lock alone cannot cover that gap).
+     */
+    @Query(value = "select count(*) from (select pg_advisory_xact_lock(hashtext(cast(:userId as text)))) t", nativeQuery = true)
+    long lockUser(@Param("userId") UUID userId);
+
     /** Row lock for guards that read savings and fixed costs together: two writers for one user queue here. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from ProfileEntity p where p.userId = :userId")

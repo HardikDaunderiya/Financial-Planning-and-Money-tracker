@@ -36,8 +36,14 @@ public class ProfileService {
     static final String SAVINGS_MESSAGE = "Savings and fixed costs leave nothing to spend. Save {max} or less.";
     static final String FIXED_COST_MESSAGE = "This cost leaves nothing to spend. Lower it or your savings.";
 
+    /** Takes the per-user write lock for this transaction; call first in every profile or fixed-cost write. */
+    void lockUser(UUID userId) {
+        profiles.lockUser(userId);
+    }
+
     @Transactional
     public Profile put(UUID userId, ProfileRequest r) {
+        lockUser(userId);
         Integer day = switch (r.paydayRule()) {
             case FIXED_DAY -> {
                 if (r.paydayDay() == null) {

@@ -1,5 +1,5 @@
 import { Redirect } from "expo-router";
-import { onlineManager } from "@tanstack/react-query";
+import { onlineManager, useIsRestoring } from "@tanstack/react-query";
 import React, { useEffect, useRef, useState } from "react";
 import { AppState, View } from "react-native";
 import { ErrorState } from "@/components/ui/error-state";
@@ -22,6 +22,7 @@ export const FIRST_SPEND_FLAG = kvKeys.firstSpend;
 
 export function HomeScreen({ now = new Date() }: { now?: Date }) {
   const today = useToday();
+  const restoring = useIsRestoring();
   const { refetch } = today;
   // The foreground handler reads the latest state through a ref, so the listener is attached once.
   const latest = useRef({ fetching: today.isFetching, updatedAt: today.dataUpdatedAt });
@@ -71,7 +72,7 @@ export function HomeScreen({ now = new Date() }: { now?: Date }) {
         <Text variant="labelMuted">{formatDay(date)}</Text>
         <Text variant="label">{firstRun ? "Day one" : greeting(now)}</Text>
       </View>
-      {!data && today.isLoading ? (
+      {!data && (today.isLoading || restoring) ? (
         <View testID="home-skeleton" style={{ gap: spacing.md }}>
           <Skeleton height={160} round />
           <Skeleton height={72} width="60%" />

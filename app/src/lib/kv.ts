@@ -7,6 +7,8 @@ export const kvKeys = {
   email: "me.email",
   firstSpend: "first-spend-logged",
   notificationsAsked: "notifications-asked",
+  /** Set once this install has run. AsyncStorage is wiped by a reinstall; the iOS keychain is not (M7). */
+  installed: "installed",
 } as const;
 
 /**

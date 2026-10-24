@@ -1,7 +1,12 @@
 import type { Personality } from "@/features/profile/api";
+import { Platform } from "react-native";
 import { log } from "./log";
 
+export const CHANNEL_ID = "default";
+
 export type NotificationsApi = {
+  /** Android 13+ shows no permission prompt until a channel exists; a no-op elsewhere. */
+  ensureChannelAsync(): Promise<void>;
   getPermissionsAsync(): Promise<{ granted: boolean }>;
   requestPermissionsAsync(): Promise<{ granted: boolean }>;
   getAllScheduledNotificationsAsync(): Promise<{ identifier: string }[]>;
@@ -9,7 +14,7 @@ export type NotificationsApi = {
   scheduleNotificationAsync(request: {
     identifier: string;
     content: { title: string; body: string };
-    trigger: { type: "daily"; hour: number; minute: number };
+    trigger: { type: "daily"; hour: number; minute: number; channelId: string };
   }): Promise<string>;
 };
 
@@ -41,6 +46,13 @@ function realApi(): NotificationsApi {
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- phone-only module, kept out of the web bundle
   const N = require("expo-notifications") as typeof import("expo-notifications");
   return {
+    ensureChannelAsync: async () => {
+      if (Platform.OS !== "android") return;
+      await N.setNotificationChannelAsync(CHANNEL_ID, {
+        name: "Daily messages",
+        importance: N.AndroidImportance.DEFAULT,
+      });
+    },
     getPermissionsAsync: () => N.getPermissionsAsync(),
     requestPermissionsAsync: () => N.requestPermissionsAsync(),
     getAllScheduledNotificationsAsync: () => N.getAllScheduledNotificationsAsync(),
@@ -53,6 +65,7 @@ function realApi(): NotificationsApi {
           type: N.SchedulableTriggerInputTypes.DAILY,
           hour: req.trigger.hour,
           minute: req.trigger.minute,
+          channelId: req.trigger.channelId,
         },
       }),
   };
@@ -61,6 +74,7 @@ function realApi(): NotificationsApi {
 export const notificationsSupported = process.env.EXPO_OS !== "web";
 
 export async function askPermission(api: NotificationsApi = realApi()): Promise<boolean> {
+  await api.ensureChannelAsync();
   const current = await api.getPermissionsAsync();
   if (current.granted) return true;
   const asked = await api.requestPermissionsAsync();
@@ -73,25 +87,33 @@ function parse(t: string): { hour: number; minute: number } {
   return { hour: h, minute: m };
 }
 
+/** Cancels every scheduled notification Gullak made (identifiers start with "gullak."). Does nothing on web. */
+export async function cancelGullak(api?: NotificationsApi): Promise<void> {
+  if (!api && !notificationsSupported) return;
+  const a = api ?? realApi();
+  const existing = await a.getAllScheduledNotificationsAsync();
+  for (const n of existing)
+    if (n.identifier.startsWith("gullak.")) await a.cancelScheduledNotificationAsync(n.identifier);
+}
+
 /** Replaces Gullak's two daily messages. Does nothing without permission. */
 export async function scheduleDaily(
   opts: { morningTime: string; nightTime: string; personality: Personality },
   api: NotificationsApi = realApi(),
 ): Promise<void> {
   if (!(await api.getPermissionsAsync()).granted) return;
-  const existing = await api.getAllScheduledNotificationsAsync();
-  for (const n of existing)
-    if (n.identifier.startsWith("gullak.")) await api.cancelScheduledNotificationAsync(n.identifier);
+  await api.ensureChannelAsync();
+  await cancelGullak(api);
   const copy = notificationCopy[opts.personality];
   await api.scheduleNotificationAsync({
     identifier: "gullak.morning",
     content: copy.morning,
-    trigger: { type: "daily", ...parse(opts.morningTime) },
+    trigger: { type: "daily", ...parse(opts.morningTime), channelId: CHANNEL_ID },
   });
   await api.scheduleNotificationAsync({
     identifier: "gullak.night",
     content: copy.night,
-    trigger: { type: "daily", ...parse(opts.nightTime) },
+    trigger: { type: "daily", ...parse(opts.nightTime), channelId: CHANNEL_ID },
   });
   log.info("notifications.scheduled", { count: 2 });
 }

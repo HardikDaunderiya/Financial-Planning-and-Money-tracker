@@ -8,5 +8,14 @@ export { RouteErrorFallback as ErrorBoundary } from "@/components/error-boundary
 export default function MeRoute() {
   const { email, signOut } = useSession();
   const profile = useProfile();
-  return <MeScreen email={email} profile={profile.data} signOut={signOut} />;
+  return (
+    <MeScreen
+      email={email}
+      profile={profile.data}
+      loading={profile.isLoading}
+      error={profile.data ? null : profile.error}
+      onRetry={() => void profile.refetch()}
+      signOut={signOut}
+    />
+  );
 }

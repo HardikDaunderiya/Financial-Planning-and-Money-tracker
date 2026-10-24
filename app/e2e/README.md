@@ -8,7 +8,9 @@ Runs against a development build on an Android emulator (or an iOS simulator) an
 4. Install Maestro (`curl -Ls "https://get.maestro.mobile.dev" | bash`) and run:
 
 ```bash
-cd app && maestro test -e GULLAK_API=http://10.0.2.2:8080/api/v1 e2e/setup.yaml
+cd app && maestro test -e GULLAK_API=http://localhost:8080/api/v1 e2e/setup.yaml
 ```
+
+(The script runs on your workstation, so it uses `localhost`. Only the app's own `.env` uses the emulator alias `10.0.2.2`.)
 
 Each run signs up a fresh `e2e-<timestamp>@example.test` user. The flows are not part of CI (they need an emulator); run them before each release and record the result in `docs/reports/`.

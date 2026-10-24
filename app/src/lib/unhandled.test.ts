@@ -18,7 +18,7 @@ describe("global handlers (ERR-18)", () => {
     const t = held.tracker;
     expect(t).not.toBeNull();
     expect(() => t?.onUnhandled(1, new Error("boom"))).not.toThrow();
-    expect(error).toHaveBeenCalledWith("promise.unhandled", { message: "boom" });
+    expect(error).toHaveBeenCalledWith("promise.unhandled", { kind: "Error" });
   });
 
   it("falls back to the window event on web", () => {
@@ -33,7 +33,7 @@ describe("global handlers (ERR-18)", () => {
       },
     });
     listeners["unhandledrejection"]?.({ reason: "nope" });
-    expect(error).toHaveBeenCalledWith("promise.unhandled", { message: "nope" });
+    expect(error).toHaveBeenCalledWith("promise.unhandled", { kind: "non-error" });
   });
 
   it("uncaught JS errors are logged and passed to the previous handler", () => {
@@ -51,7 +51,27 @@ describe("global handlers (ERR-18)", () => {
       },
     });
     (handler as ((e: Error, fatal?: boolean) => void) | null)?.(new Error("crash"), true);
-    expect(error).toHaveBeenCalledWith("js.uncaught", { message: "crash", fatal: true });
+    expect(error).toHaveBeenCalledWith("js.uncaught", { kind: "Error", fatal: true });
     expect(previous).toHaveBeenCalled();
+  });
+
+  it("never logs the message text of an error", () => {
+    const error = jest.fn();
+    const held: { tracker: Tracker | null } = { tracker: null };
+    installGlobalHandlers({
+      log: { error },
+      hermes: {
+        enablePromiseRejectionTracker: (o) => {
+          held.tracker = o;
+        },
+      },
+      errorUtils: null,
+    });
+    class PaymentFailed extends Error {
+      override name = "PaymentFailed";
+    }
+    held.tracker?.onUnhandled(1, new PaymentFailed("rahul@example.com owes 4500"));
+    expect(error).toHaveBeenCalledWith("promise.unhandled", { kind: "PaymentFailed" });
+    expect(JSON.stringify(error.mock.calls)).not.toMatch(/rahul|4500/);
   });
 });

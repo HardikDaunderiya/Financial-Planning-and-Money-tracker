@@ -66,6 +66,7 @@ async function cacheOf(owner: string, line: string) {
 
 beforeEach(async () => {
   await AsyncStorage.clear();
+  await AsyncStorage.setItem("gullak.installed", "1"); // a returning install, so stored sessions are trusted
 });
 
 describe("OwnedCache", () => {

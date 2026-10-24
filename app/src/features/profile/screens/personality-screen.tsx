@@ -41,7 +41,9 @@ export function PersonalityScreen({ today, fixedPaise, finish, onDone, onBack }:
   }).verdict;
   const base = firstCyclePreview({ monthlySpendablePaise: freePaise, today, payday });
   // The money-left answer counts only while its card is on screen (step 3 shows it when pro-rated and possible).
-  const answer = verdict !== "notPossible" && base.proRated ? draft.moneyLeftPaise : null;
+  const stored = verdict !== "notPossible" && base.proRated ? draft.moneyLeftPaise : null;
+  // An answer above the income would be rejected by the server on every retry, so it is not sent.
+  const answer = stored !== null && stored <= draft.incomePaise ? stored : null;
   const preview = firstCyclePreview({
     monthlySpendablePaise: freePaise,
     today,

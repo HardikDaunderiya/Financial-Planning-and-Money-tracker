@@ -40,6 +40,15 @@ jest.mock("expo-notifications", () => ({
   SchedulableTriggerInputTypes: { DAILY: "daily" },
 }));
 
+// A stored session is only trusted when this install has run before (M7); tests start as a returning install.
+beforeEach(async () => {
+  const mod = require("@react-native-async-storage/async-storage") as {
+    default?: { setItem(k: string, v: string): Promise<void> };
+    setItem(k: string, v: string): Promise<void>;
+  };
+  await (mod.default ?? mod).setItem("gullak.installed", "1");
+});
+
 process.env.EXPO_PUBLIC_API_URL = "http://test.local/api/v1";
 
 // The app's shared query client and persister keep timers (garbage collection, the throttled disk write). Settle

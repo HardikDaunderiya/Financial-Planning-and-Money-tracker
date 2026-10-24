@@ -105,7 +105,18 @@ export function SetupProvider({
     if (persist && hydrated && draft !== emptyDraft) void kv.set(KEY, JSON.stringify(draft));
   }, [persist, hydrated, draft]);
 
-  const set = useCallback((patch: Partial<SetupDraft>) => setDraft((d) => ({ ...d, ...patch })), []);
+  const set = useCallback(
+    (patch: Partial<SetupDraft>) =>
+      setDraft((d) => {
+        const next = { ...d, ...patch };
+        // The money-left answer can never exceed the income, so lowering income lowers the answer with it.
+        if (patch.incomePaise !== undefined && next.moneyLeftPaise !== null) {
+          next.moneyLeftPaise = Math.min(next.moneyLeftPaise, next.incomePaise);
+        }
+        return next;
+      }),
+    [],
+  );
 
   const reset = useCallback(() => {
     setDraft(emptyDraft);

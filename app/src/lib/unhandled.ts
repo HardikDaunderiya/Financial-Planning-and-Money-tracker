@@ -20,9 +20,9 @@ export type GlobalHandlerDeps = {
   addEventListener?: ((name: "unhandledrejection", fn: (e: { reason: unknown }) => void) => void) | undefined;
 };
 
-function messageOf(reason: unknown): string {
-  if (reason instanceof Error) return reason.message;
-  return typeof reason === "string" ? reason : "non-error rejection";
+/** Only the error's name is logged, never its text: messages can carry server bodies or user data. */
+function kindOf(reason: unknown): string {
+  return reason instanceof Error ? reason.name : "non-error";
 }
 
 function detect(): GlobalHandlerDeps {
@@ -50,8 +50,7 @@ export function installGlobalHandlers(injected?: GlobalHandlerDeps): void {
     installed = true;
   }
   const deps = injected ?? detect();
-  const onUnhandled = (reason: unknown) =>
-    deps.log.error("promise.unhandled", { message: messageOf(reason) });
+  const onUnhandled = (reason: unknown) => deps.log.error("promise.unhandled", { kind: kindOf(reason) });
   // Hermes has no getter for the previous tracker, so in development we leave React Native's in place.
   if (deps.hermes?.enablePromiseRejectionTracker && !deps.dev) {
     deps.hermes.enablePromiseRejectionTracker({
@@ -65,7 +64,7 @@ export function installGlobalHandlers(injected?: GlobalHandlerDeps): void {
   if (deps.errorUtils) {
     const previous = deps.errorUtils.getGlobalHandler();
     deps.errorUtils.setGlobalHandler((e, isFatal) => {
-      deps.log.error("js.uncaught", { message: messageOf(e), fatal: !!isFatal });
+      deps.log.error("js.uncaught", { kind: kindOf(e), fatal: !!isFatal });
       previous?.(e, isFatal);
     });
   }

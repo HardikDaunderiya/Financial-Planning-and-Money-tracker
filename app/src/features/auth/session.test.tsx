@@ -7,6 +7,7 @@ import { NetworkError } from "@/lib/api-errors";
 import { authEvents } from "@/lib/client";
 import { kv } from "@/lib/kv";
 import { queryClient } from "@/lib/query";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 function store(initial: Tokens | null): TokenStore & { tokens: Tokens | null } {
   const s = {
@@ -244,5 +245,142 @@ describe("session", () => {
     expect(JSON.stringify(warn.mock.calls)).toContain("session.wipe_failed");
     expect(JSON.stringify(warn.mock.calls)).not.toContain("secret@x.com");
     warn.mockRestore();
+  });
+
+  describe("notifications on sign-out (I2)", () => {
+    const N = () =>
+      jest.requireMock<{
+        getAllScheduledNotificationsAsync: jest.Mock;
+        cancelScheduledNotificationAsync: jest.Mock;
+      }>("expo-notifications");
+    beforeEach(() => {
+      N().getAllScheduledNotificationsAsync.mockResolvedValue([
+        { identifier: "gullak.morning" },
+        { identifier: "gullak.night" },
+        { identifier: "other.app" },
+      ]);
+      N().cancelScheduledNotificationAsync.mockClear();
+    });
+    afterEach(() => N().getAllScheduledNotificationsAsync.mockResolvedValue([]));
+
+    it("the sign-out button cancels Gullak's scheduled messages", async () => {
+      let session: ReturnType<typeof useSession> | undefined;
+      await render(
+        <SessionProvider
+          store={store({ accessToken: "A", refreshToken: "R" })}
+          logout={() => Promise.resolve()}
+          wipeCache={() => Promise.resolve()}
+        >
+          <Probe onReady={(x) => (session = x)} />
+        </SessionProvider>,
+      );
+      await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("signedIn"));
+      await act(() => session?.signOut() ?? Promise.resolve());
+      expect(N().cancelScheduledNotificationAsync.mock.calls).toEqual([["gullak.morning"], ["gullak.night"]]);
+    });
+
+    it("a forced sign-out cancels them too", async () => {
+      await render(
+        <SessionProvider
+          store={store({ accessToken: "A", refreshToken: "R" })}
+          logout={() => Promise.resolve()}
+          wipeCache={() => Promise.resolve()}
+        >
+          <Probe />
+        </SessionProvider>,
+      );
+      await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("signedIn"));
+      await act(() => Promise.resolve(authEvents.emitSignedOut()));
+      await waitFor(() => expect(N().cancelScheduledNotificationAsync).toHaveBeenCalledTimes(2));
+    });
+
+    it("a failing cancel still completes sign-out", async () => {
+      N().getAllScheduledNotificationsAsync.mockRejectedValueOnce(new Error("native"));
+      const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+      let session: ReturnType<typeof useSession> | undefined;
+      await render(
+        <SessionProvider
+          store={store({ accessToken: "A", refreshToken: "R" })}
+          logout={() => Promise.resolve()}
+          wipeCache={() => Promise.resolve()}
+        >
+          <Probe onReady={(x) => (session = x)} />
+        </SessionProvider>,
+      );
+      await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("signedIn"));
+      await act(() => session?.signOut() ?? Promise.resolve());
+      expect(screen.getByTestId("status")).toHaveTextContent("signedOut");
+      warn.mockRestore();
+    });
+  });
+
+  it("a cold start that hydrates signed out removes the persisted cache and the per-user keys (M6)", async () => {
+    await AsyncStorage.multiSet([
+      ["gullak.query-cache", "{}"],
+      ["gullak.setup-draft", "{}"],
+      ["gullak.me.email", "old@example.com"],
+      ["gullak.first-spend-logged", "1"],
+      ["gullak.notifications-asked", "1"],
+    ]);
+    await render(
+      <SessionProvider store={store(null)} logout={() => Promise.resolve()}>
+        <Probe />
+      </SessionProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("signedOut"));
+    await waitFor(async () =>
+      expect(
+        await AsyncStorage.multiGet([
+          "gullak.query-cache",
+          "gullak.setup-draft",
+          "gullak.me.email",
+          "gullak.first-spend-logged",
+          "gullak.notifications-asked",
+        ]),
+      ).toEqual([
+        ["gullak.query-cache", null],
+        ["gullak.setup-draft", null],
+        ["gullak.me.email", null],
+        ["gullak.first-spend-logged", null],
+        ["gullak.notifications-asked", null],
+      ]),
+    );
+  });
+
+  describe("first-run marker (M7)", () => {
+    it("a stored session on an install that never ran (iOS reinstall keeps the keychain) starts signed out and clears the tokens", async () => {
+      await AsyncStorage.removeItem("gullak.installed");
+      const s = store({ accessToken: "A", refreshToken: "R" });
+      await render(
+        <SessionProvider store={s} logout={() => Promise.resolve()}>
+          <Probe />
+        </SessionProvider>,
+      );
+      await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("signedOut"));
+      expect(s.tokens).toBeNull();
+      await waitFor(async () => expect(await AsyncStorage.getItem("gullak.installed")).toBe("1"));
+    });
+
+    it("a first launch with nothing stored sets the marker", async () => {
+      await AsyncStorage.removeItem("gullak.installed");
+      await render(
+        <SessionProvider store={store(null)} logout={() => Promise.resolve()}>
+          <Probe />
+        </SessionProvider>,
+      );
+      await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("signedOut"));
+      await waitFor(async () => expect(await AsyncStorage.getItem("gullak.installed")).toBe("1"));
+    });
+
+    it("a returning install keeps its session", async () => {
+      const s = store({ accessToken: "A", refreshToken: "R" });
+      await render(
+        <SessionProvider store={s} logout={() => Promise.resolve()}>
+          <Probe />
+        </SessionProvider>,
+      );
+      await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("signedIn"));
+      expect(s.tokens).not.toBeNull();
+    });
   });
 });

@@ -1,8 +1,9 @@
-import React, { createContext, use, useCallback, useEffect, useMemo, useState } from "react";
+import React, { createContext, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createTokenOwner, type SessionControl } from "@/lib/api";
 import { api, authEvents } from "@/lib/client";
 import { kv, kvKeys } from "@/lib/kv";
 import { log } from "@/lib/log";
+import { cancelGullak } from "@/lib/notifications";
 import { closePersistence, openPersistence, persister, queryClient } from "@/lib/query";
 import type { TokenStore, Tokens } from "@/lib/storage";
 import { authApi } from "./api";
@@ -48,19 +49,16 @@ export function SessionProvider({
   const [status, setStatus] = useState<SessionStatus>("loading");
   const [email, setEmail] = useState<string | null>(null);
 
-  // Everything tied to the departing user goes: in-memory and persisted query cache, setup answers, email,
-  // per-user flags. It never throws, and callers await it so sign-out finishes only when storage is clean.
-  const forget = useCallback(async () => {
-    closePersistence();
-    queryClient.clear();
-    setEmail(null);
-    setStatus("signedOut");
+  // The disk half of forgetting a user: persisted query cache, setup answers, email, per-user flags, and the
+  // daily messages Gullak scheduled on this phone. Never throws.
+  const wipeDisk = useCallback(async () => {
     const results = await Promise.allSettled([
       kv.remove(kvKeys.setupDraft),
       kv.remove(kvKeys.email),
       kv.remove(kvKeys.firstSpend),
       kv.remove(kvKeys.notificationsAsked),
       wipeCache(),
+      cancelGullak(),
     ]);
     for (const r of results) {
       if (r.status === "rejected") {
@@ -69,15 +67,43 @@ export function SessionProvider({
     }
   }, [wipeCache]);
 
+  // Everything tied to the departing user goes: in-memory query cache plus the disk half. Callers await it so
+  // sign-out finishes only when storage is clean.
+  const forget = useCallback(async () => {
+    closePersistence();
+    queryClient.clear();
+    setEmail(null);
+    setStatus("signedOut");
+    await wipeDisk();
+  }, [wipeDisk]);
+
+  // Hydration runs once per control; it reads the latest callbacks through a ref so inline props never re-run it.
+  const hydrateWith = useRef({ logout, wipeDisk });
+  useEffect(() => {
+    hydrateWith.current = { logout, wipeDisk };
+  });
+
   useEffect(() => {
     let alive = true;
     control
       .current()
-      .then(async (t) => {
+      .then(async (stored) => {
+        // The keychain outlives an iOS reinstall but AsyncStorage does not: a session without the first-run
+        // marker belongs to a previous install, so it is dropped (M7).
+        let t = stored;
+        if ((await kv.get(kvKeys.installed)) === null) {
+          if (t) {
+            t = null;
+            await control.signOut(hydrateWith.current.logout).catch(() => undefined);
+          }
+          await kv.set(kvKeys.installed, "1");
+        }
         const saved = t ? await kv.get(kvKeys.email) : null;
         if (!alive) return;
         setEmail(saved);
         setStatus(t ? "signedIn" : "signedOut");
+        // Signed out at launch: nothing from a previous session may linger on disk (a web reload, a failed wipe).
+        if (!t) void hydrateWith.current.wipeDisk();
       })
       .catch((e: unknown) => {
         log.warn("session.load_failed", { reason: e instanceof Error ? e.name : "unknown" });

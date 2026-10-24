@@ -64,6 +64,36 @@ describe("a stale money-left answer is never sent", () => {
     );
   });
 
+  it("sends null when the stored answer is above the income (M2)", async () => {
+    const finish = jest.fn(() => Promise.resolve());
+    function TwoStep() {
+      const { set, draft } = useSetup();
+      React.useEffect(() => {
+        if (draft.incomePaise === 0) set({ ...base, incomePaise: 5000000 });
+        else if (draft.moneyLeftPaise === null) set({ moneyLeftPaise: 6000000 }); // no income change, so no clamp
+      }, [set, draft.incomePaise, draft.moneyLeftPaise]);
+      return null;
+    }
+    await render(
+      <SafeAreaProvider initialMetrics={metrics}>
+        <SetupProvider persist={false}>
+          <TwoStep />
+          <PersonalityScreen
+            today="2026-10-23"
+            fixedPaise={1500000}
+            finish={finish}
+            onDone={() => {}}
+            onBack={() => {}}
+          />
+        </SetupProvider>
+      </SafeAreaProvider>,
+    );
+    await fireEvent.press(screen.getByRole("button", { name: /Start with/ }));
+    await waitFor(() =>
+      expect(finish).toHaveBeenCalledWith(expect.objectContaining({ moneyLeftPaise: null })),
+    );
+  });
+
   it("sends null on payday itself, when nothing is pro-rated", async () => {
     const { finish } = await renderIt({ ...base, moneyLeftPaise: 600000 }, "2026-11-01");
     await fireEvent.press(screen.getByRole("button", { name: /Start with/ }));

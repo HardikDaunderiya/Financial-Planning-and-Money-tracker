@@ -71,6 +71,45 @@ describe("setup draft store", () => {
     expect(api?.draft).toEqual(emptyDraft);
   });
 
+  it("clamps the money-left answer to the income whenever income changes (M2)", async () => {
+    await render(
+      <SetupProvider persist={false}>
+        <Probe />
+      </SetupProvider>,
+    );
+    await act(() => {
+      api?.set({ incomePaise: 5_000_000 });
+      return Promise.resolve();
+    });
+    await act(() => {
+      api?.set({ moneyLeftPaise: 600_000 });
+      return Promise.resolve();
+    });
+    await act(() => {
+      api?.set({ incomePaise: 400_000 });
+      return Promise.resolve();
+    });
+    expect(api?.draft.moneyLeftPaise).toBe(400_000);
+    await act(() => {
+      api?.set({ incomePaise: 9_000_000 });
+      return Promise.resolve();
+    });
+    expect(api?.draft.moneyLeftPaise).toBe(400_000);
+  });
+
+  it("leaves an unanswered money-left alone when income changes (M2)", async () => {
+    await render(
+      <SetupProvider persist={false}>
+        <Probe />
+      </SetupProvider>,
+    );
+    await act(() => {
+      api?.set({ incomePaise: 400_000 });
+      return Promise.resolve();
+    });
+    expect(api?.draft.moneyLeftPaise).toBeNull();
+  });
+
   it("paydayIsComplete needs a day for a fixed day", () => {
     expect(paydayIsComplete(null)).toBe(false);
     expect(paydayIsComplete({ rule: "FIXED_DAY", day: null })).toBe(false);

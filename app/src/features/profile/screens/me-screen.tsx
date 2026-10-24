@@ -1,8 +1,12 @@
 import React, { useState } from "react";
 import { View } from "react-native";
 import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/ui/error-state";
 import { Screen } from "@/components/ui/screen";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
+import { describeError } from "@/lib/api-errors";
+import { messageFor } from "@/lib/errors";
 import { colors, radius, spacing } from "@/theme";
 import type { Profile } from "../api";
 import { personalities } from "../components/personality-picker";
@@ -15,10 +19,16 @@ function time(t: string): string {
 export function MeScreen({
   email,
   profile,
+  loading = false,
+  error = null,
+  onRetry,
   signOut,
 }: {
   email: string | null;
   profile: Profile | null | undefined;
+  loading?: boolean;
+  error?: unknown;
+  onRetry?: () => void;
   signOut: () => Promise<void>;
 }) {
   const [confirming, setConfirming] = useState(false);
@@ -43,6 +53,15 @@ export function MeScreen({
           <Text variant="body" selectable numberOfLines={1} ellipsizeMode="tail">
             {email}
           </Text>
+        ) : null}
+        {loading ? (
+          <View testID="me-loading" style={{ gap: spacing.sm }}>
+            <Skeleton height={20} width="40%" />
+            <Skeleton height={20} width="60%" />
+          </View>
+        ) : null}
+        {!loading && !profile && error ? (
+          <ErrorState body={describeError(error, messageFor)} onRetry={() => onRetry?.()} />
         ) : null}
         {personality ? <Text variant="bodyMuted">{personality}</Text> : null}
         {profile ? (

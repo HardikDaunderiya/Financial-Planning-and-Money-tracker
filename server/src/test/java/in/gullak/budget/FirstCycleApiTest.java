@@ -24,7 +24,8 @@ class FirstCycleApiTest extends ApiTest {
             .andExpect(jsonPath("$.daysLeft").value(9))
             .andExpect(jsonPath("$.budgetPaise").value(48_300))
             .andExpect(jsonPath("$.leftPaise").value(48_300));
-        assertThat(poolOverride(u)).isEqualTo(435_400L);
+        assertThat(poolOverride(u)).isNull(); // computed live from budget_from, never pinned
+        assertThat(budgetFrom(u)).isEqualTo("2026-10-23");
     }
 
     @Test
@@ -38,12 +39,23 @@ class FirstCycleApiTest extends ApiTest {
     }
 
     @Test
-    void moneyLeftIsWhatTheUserHasNowSoEarlierSpendsAreNotChargedTwice() throws Exception { // BUD-32
+    void moneyLeftIsWhatTheUserHasNowSoSpendsSinceSetupAreNotChargedTwice() throws Exception { // BUD-32b
         TestUser u = newlySetUpUser();
-        today(u);
-        seedSpend(u, 200_000, Instant.parse("2026-10-22T10:00:00Z"));
-        firstCycle(u, 600_000).andExpect(status().isOk()).andExpect(jsonPath("$.budgetPaise").value(66_600));
+        today(u); // setup on 23 Oct: budget_from = 23 Oct
+        seedSpend(u, 200_000, Instant.parse("2026-10-23T04:30:00Z")); // 23 Oct, 10:00 IST
+        clock.set(Instant.parse("2026-10-24T04:00:00Z"));
+        u = signIn(u.email()); // access tokens last 15 minutes
+        firstCycle(u, 600_000).andExpect(status().isOk()).andExpect(jsonPath("$.budgetPaise").value(75_000)); // (800,000 - 200,000) / 8
         assertThat(poolOverride(u)).isEqualTo(800_000L);
+    }
+
+    @Test
+    void aSpendBeforeSetupDoesNotReduceTheFirstCycleBudget() throws Exception { // BUD-32c
+        TestUser u = newlySetUpUser();
+        seedSpend(u, 200_000, Instant.parse("2026-10-20T10:00:00Z"));
+        today(u).andExpect(jsonPath("$.budgetPaise").value(48_300)).andExpect(jsonPath("$.leftPaise").value(48_300));
+        firstCycle(u, 600_000).andExpect(jsonPath("$.budgetPaise").value(66_600));
+        assertThat(poolOverride(u)).isEqualTo(600_000L);
     }
 
     @Test
@@ -84,22 +96,34 @@ class FirstCycleApiTest extends ApiTest {
         TestUser u = newlySetUpUser();
         today(u).andExpect(jsonPath("$.budgetPaise").value(50_000)).andExpect(jsonPath("$.daysLeft").value(30));
         assertThat(poolOverride(u)).isNull();
+        assertThat(budgetFrom(u)).isNull(); // created on its own first day
     }
 
     @Test
-    void spendsInTheFirstCycleComeOutOfTheProRatedPool() throws Exception {
+    void spendsSinceSetupComeOutOfTheProRatedPool() throws Exception {
         TestUser u = newlySetUpUser();
         today(u);
-        seedSpend(u, 200_000, Instant.parse("2026-10-22T10:00:00Z")); // yesterday
-        today(u).andExpect(jsonPath("$.budgetPaise").value(26_100)); // (435,400 − 200,000) ÷ 9 = 26,155 → ₹261
+        seedSpend(u, 200_000, Instant.parse("2026-10-23T04:30:00Z")); // setup day, after setup
+        clock.set(Instant.parse("2026-10-24T04:00:00Z"));
+        u = signIn(u.email());
+        today(u).andExpect(jsonPath("$.budgetPaise").value(29_400)); // (435,400 - 200,000) / 8 = 29,425 -> Rs 294
     }
 
     @Test
-    void editsDuringTheFirstCycleKeepThePool() throws Exception { // decided in Plan 2: the user said what they have
+    void withoutAnAnswerEditsDuringTheFirstCycleChangeTheBudget() throws Exception {
         TestUser u = newlySetUpUser();
-        today(u);
-        addFixedCost(u, "Gym", 150_000);
         today(u).andExpect(jsonPath("$.budgetPaise").value(48_300));
+        addFixedCost(u, "Gym", 150_000); // spendable 1,500,000 -> 1,350,000; x 9/31 = 391,935 -> 391,900; / 9
+        today(u).andExpect(jsonPath("$.budgetPaise").value(43_500));
+        assertThat(poolOverride(u)).isNull();
+    }
+
+    @Test
+    void withAnAnswerEditsDuringTheFirstCycleKeepThePool() throws Exception { // the user said what they have
+        TestUser u = newlySetUpUser();
+        firstCycle(u, 600_000).andExpect(jsonPath("$.budgetPaise").value(66_600));
+        addFixedCost(u, "Gym", 150_000);
+        today(u).andExpect(jsonPath("$.budgetPaise").value(66_600));
     }
 
     @Test
@@ -143,6 +167,11 @@ class FirstCycleApiTest extends ApiTest {
 
     private ResultActions today(TestUser u) throws Exception {
         return mvc.perform(get("/api/v1/budget/today").with(auth(u)));
+    }
+
+    private String budgetFrom(TestUser u) {
+        return jdbc.sql("select budget_from::text from cycles where user_id = ? order by start_date desc limit 1")
+            .param(u.id()).query(String.class).optional().orElse(null);
     }
 
     private Long poolOverride(TestUser u) {

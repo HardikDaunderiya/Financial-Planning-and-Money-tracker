@@ -8,7 +8,7 @@ final class FirstCycle {
     private FirstCycle() {}
 
     /**
-     * The pool for a first cycle created on {@code today}, rounded down to whole rupees, or null when today
+     * The pool for a first cycle budgeted from {@code today}, rounded down to whole rupees, or null when today
      * is the cycle's first day (nothing to pro-rate).
      */
     static Long proRate(long monthlySpendablePaise, LocalDate today, Cycle cycle) {

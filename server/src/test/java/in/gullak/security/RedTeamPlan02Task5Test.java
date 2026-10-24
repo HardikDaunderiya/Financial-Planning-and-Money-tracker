@@ -196,7 +196,7 @@ class RedTeamPlan02Task5Test extends ApiTest {
         today(u).andExpect(status().isOk());
         jdbc.sql("update cycles set closed_at = now() where user_id = ?").param(u.id()).update();
         firstCycle(u, 777_700).andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("FIRST_CYCLE_OVER"));
-        assertThat(pool(u)).isEqualTo(435_400L); // pro-rated pool untouched
+        assertThat(pool(u)).isNull(); // nothing pinned on the closed cycle
     }
 
     // ---------------------------------------------------------------- value validation

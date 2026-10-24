@@ -25,10 +25,10 @@ public class CycleService {
     /**
      * The cycle covering {@code today}, created on first use. After a payday change the current cycle
      * keeps its end date; the next one starts the day after it and ends the day before the new payday.
-     * A user's very first cycle, created mid-cycle, gets a pro-rated pool (spec 2.1).
+     * A user's very first cycle, created mid-cycle, is budgeted from that day (spec 2.1).
      */
     @Transactional
-    public CurrentCycle current(UUID userId, LocalDate today, Profile profile, long monthlySpendablePaise) {
+    public CurrentCycle current(UUID userId, LocalDate today, Profile profile) {
         Optional<CycleEntity> existing = cycles.findCovering(userId, today);
         if (existing.isPresent()) {
             return toCurrent(userId, existing.get());
@@ -40,16 +40,16 @@ public class CycleService {
             .orElse(natural.start());
         Cycle cycle = new Cycle(start, natural.end());
         boolean first = cycles.countEndingBefore(userId, cycle.start()) == 0;
-        Long pool = first ? FirstCycle.proRate(monthlySpendablePaise, today, cycle) : null;
-        if (cycles.insertIfAbsent(UUID.randomUUID(), userId, cycle.start(), cycle.end(), pool) == 1) {
-            log.info("{} user={} days={} proRated={}", Events.CYCLE_OPENED, userId, cycle.days(), pool != null);
+        LocalDate budgetFrom = first && today.isAfter(cycle.start()) ? today : null;
+        if (cycles.insertIfAbsent(UUID.randomUUID(), userId, cycle.start(), cycle.end(), null, budgetFrom) == 1) {
+            log.info("{} user={} days={} proRated={}", Events.CYCLE_OPENED, userId, cycle.days(), budgetFrom != null);
         }
         // Nothing covers today after the insert only when it lost to an overlapping cycle that is not visible to
-        // this snapshot. The fallback carries an unsaved pool and a null id, so setFirstCyclePool answers
+        // this snapshot. The fallback carries a null id, so setFirstCyclePool answers
         // FIRST_CYCLE_OVER instead of pinning a pool on a row that is not there; the next request reads the real row.
         return cycles.findCovering(userId, today)
             .map(e -> toCurrent(userId, e))
-            .orElseGet(() -> new CurrentCycle(null, cycle, pool, first));
+            .orElseGet(() -> new CurrentCycle(null, cycle, null, budgetFrom, first));
     }
 
     /** Pins the pool of the caller's first, still-open cycle to what they said they have left. */
@@ -62,6 +62,6 @@ public class CycleService {
     }
 
     private CurrentCycle toCurrent(UUID userId, CycleEntity e) {
-        return new CurrentCycle(e.getId(), e.toCycle(), e.getPoolOverridePaise(), cycles.countEndingBefore(userId, e.getStartDate()) == 0);
+        return new CurrentCycle(e.getId(), e.toCycle(), e.getPoolOverridePaise(), e.getBudgetFrom(), cycles.countEndingBefore(userId, e.getStartDate()) == 0);
     }
 }

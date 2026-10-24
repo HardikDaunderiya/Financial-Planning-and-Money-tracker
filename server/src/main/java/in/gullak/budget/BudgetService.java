@@ -36,7 +36,7 @@ public class BudgetService {
         Profile profile = profiles.get(userId);
         LocalDate today = Ist.today(clock);
         long fixed = fixedCosts.totalFor(userId);
-        CurrentCycle current = cycles.current(userId, today, profile, spendable(profile, fixed));
+        CurrentCycle current = cycles.current(userId, today, profile);
         return compute(userId, profile, today, fixed, current);
     }
 
@@ -45,27 +45,41 @@ public class BudgetService {
         Profile profile = profiles.get(userId);
         LocalDate today = Ist.today(clock);
         long fixed = fixedCosts.totalFor(userId);
-        CurrentCycle current = cycles.current(userId, today, profile, spendable(profile, fixed));
+        CurrentCycle current = cycles.current(userId, today, profile);
         if (moneyLeftPaise > profile.incomePaise()) {
             throw new ValidationException("moneyLeftPaise", "Can't be more than your monthly income");
         }
         // "Money left" is money in hand now, so the pinned pool also holds what this cycle already spent.
-        long spentSoFar = totals.spent(userId, Ist.startOf(current.cycle().start()), Ist.startOf(today.plusDays(1)));
+        long spentSoFar = totals.spent(userId, Ist.startOf(budgetStart(current)), Ist.startOf(today.plusDays(1)));
         cycles.setFirstCyclePool(userId, current, moneyLeftPaise + spentSoFar);
-        return compute(userId, profile, today, fixed, cycles.current(userId, today, profile, spendable(profile, fixed)));
+        return compute(userId, profile, today, fixed, cycles.current(userId, today, profile));
     }
 
     private static long spendable(Profile profile, long fixed) {
         return profile.incomePaise() - fixed - profile.savingsPaise();
     }
 
+    /** The first day whose spends count: setup day for a first cycle created mid-cycle, else the cycle's start. */
+    private static LocalDate budgetStart(CurrentCycle current) {
+        return current.budgetFrom() != null ? current.budgetFrom() : current.cycle().start();
+    }
+
+    /** The pinned pool if the user answered, else the first cycle's live pro-rate, else null (normal formula). */
+    private static Long pool(CurrentCycle current, long spendable) {
+        if (current.poolOverridePaise() != null) {
+            return current.poolOverridePaise();
+        }
+        return current.budgetFrom() == null ? null : FirstCycle.proRate(spendable, current.budgetFrom(), current.cycle());
+    }
+
     private TodayResponse compute(UUID userId, Profile profile, LocalDate today, long fixed, CurrentCycle current) {
         Cycle cycle = current.cycle();
-        long before = totals.spent(userId, Ist.startOf(cycle.start()), Ist.startOf(today));
+        long before = totals.spent(userId, Ist.startOf(budgetStart(current)), Ist.startOf(today));
         long spentToday = totals.spent(userId, Ist.startOf(today), Ist.startOf(today.plusDays(1)));
         int daysLeft = (int) ChronoUnit.DAYS.between(today, cycle.end()) + 1;
-        BudgetInput input = current.poolOverridePaise() != null
-            ? BudgetInput.ofSpendable(current.poolOverridePaise(), before, spentToday, daysLeft)
+        Long pool = pool(current, spendable(profile, fixed));
+        BudgetInput input = pool != null
+            ? BudgetInput.ofSpendable(pool, before, spentToday, daysLeft)
             : new BudgetInput(profile.incomePaise(), fixed, profile.savingsPaise(), before, spentToday, daysLeft);
         DailyBudget b = BudgetCalculator.compute(input);
         return new TodayResponse(today, b.budgetPaise(), b.spentTodayPaise(), b.leftPaise(), b.overPaise(),

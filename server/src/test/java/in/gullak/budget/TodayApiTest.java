@@ -197,7 +197,7 @@ class TodayApiTest extends ApiTest {
         today(u).andExpect(status().isOk()).andExpect(jsonPath("$.cycleStart").value("2026-10-01"));
         // A racing request that read a different payday would insert 15 Oct - 14 Nov.
         Integer inserted = new TransactionTemplate(txManager).execute(tx -> cycleRepository.insertIfAbsent(
-            UUID.randomUUID(), u.id(), LocalDate.of(2026, 10, 15), LocalDate.of(2026, 11, 14), null));
+            UUID.randomUUID(), u.id(), LocalDate.of(2026, 10, 15), LocalDate.of(2026, 11, 14), null, null));
         assertThat(inserted).isZero();
         assertThat(cycleCount(u)).isEqualTo(1);
         today(u).andExpect(status().isOk())

@@ -111,4 +111,81 @@ describe("session", () => {
     expect(remove).toHaveBeenCalledWith("setup-draft");
     remove.mockRestore();
   });
+
+  it("signOut wipes the persisted query cache so the next person sees nothing", async () => {
+    const s = store({ accessToken: "A", refreshToken: "R" });
+    const removeClient = jest.fn(() => Promise.resolve());
+    let session: ReturnType<typeof useSession> | undefined;
+    await render(
+      <SessionProvider store={s} logout={() => Promise.resolve()} wipeCache={removeClient}>
+        <Probe onReady={(x) => (session = x)} />
+      </SessionProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("signedIn"));
+    await act(() => session?.signOut() ?? Promise.resolve());
+    expect(removeClient).toHaveBeenCalledTimes(1);
+  });
+
+  it("a forced sign-out also wipes the persisted cache and the stored email", async () => {
+    const removeClient = jest.fn(() => Promise.resolve());
+    const remove = jest.spyOn(kv, "remove").mockResolvedValue(undefined);
+    await render(
+      <SessionProvider
+        store={store({ accessToken: "A", refreshToken: "R" })}
+        logout={() => Promise.resolve()}
+        wipeCache={removeClient}
+      >
+        <Probe />
+      </SessionProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("signedIn"));
+    await act(() => Promise.resolve(authEvents.emitSignedOut()));
+    await waitFor(() => expect(removeClient).toHaveBeenCalledTimes(1));
+    expect(remove).toHaveBeenCalledWith("me.email");
+    remove.mockRestore();
+  });
+
+  it("signIn keeps the email, it is restored on the next start, and sign-out forgets it", async () => {
+    const mem = new Map<string, string>();
+    const get = jest.spyOn(kv, "get").mockImplementation((k) => Promise.resolve(mem.get(k) ?? null));
+    const set = jest.spyOn(kv, "set").mockImplementation((k, v) => {
+      mem.set(k, v);
+      return Promise.resolve();
+    });
+    const remove = jest.spyOn(kv, "remove").mockImplementation((k) => {
+      mem.delete(k);
+      return Promise.resolve();
+    });
+    const Email = () => <Text testID="email">{useSession().email ?? "none"}</Text>;
+    let session: ReturnType<typeof useSession> | undefined;
+    const s = store(null);
+    const wipe = () => Promise.resolve();
+    const first = await render(
+      <SessionProvider store={s} logout={() => Promise.resolve()} wipeCache={wipe}>
+        <Probe onReady={(x) => (session = x)} />
+        <Email />
+      </SessionProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("signedOut"));
+    await act(
+      () =>
+        session?.signIn({ accessToken: "A", refreshToken: "R" }, "priya@example.com") ?? Promise.resolve(),
+    );
+    expect(screen.getByTestId("email")).toHaveTextContent("priya@example.com");
+    expect(mem.get("me.email")).toBe("priya@example.com");
+    await first.unmount();
+    await render(
+      <SessionProvider store={s} logout={() => Promise.resolve()} wipeCache={wipe}>
+        <Probe onReady={(x) => (session = x)} />
+        <Email />
+      </SessionProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId("email")).toHaveTextContent("priya@example.com"));
+    await act(() => session?.signOut() ?? Promise.resolve());
+    expect(screen.getByTestId("email")).toHaveTextContent("none");
+    expect(mem.has("me.email")).toBe(false);
+    get.mockRestore();
+    set.mockRestore();
+    remove.mockRestore();
+  });
 });

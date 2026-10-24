@@ -1,4 +1,4 @@
-import { useRouter, type Href } from "expo-router";
+import { useRouter } from "expo-router";
 import React from "react";
 import { useFinishSetup, useFixedCosts } from "@/features/profile/hooks";
 import { PersonalityScreen } from "@/features/profile/screens/personality-screen";
@@ -18,7 +18,7 @@ export default function PersonalityRoute() {
       finish={finish}
       onDone={() => {
         // Navigate first, then clear the draft, so the old screen never renders an emptied draft.
-        router.replace("/onboarding/notifications" as unknown as Href);
+        router.replace("/onboarding/notifications");
         reset();
       }}
       onBack={() => router.back()}

@@ -24,7 +24,7 @@ export default function LoginCodeScreen() {
         requestCode={authApi.requestCode}
         onVerified={(pair) => {
           session
-            .signIn({ accessToken: pair.accessToken, refreshToken: pair.refreshToken })
+            .signIn({ accessToken: pair.accessToken, refreshToken: pair.refreshToken }, email)
             .catch(() => setError("Something went wrong. Try again in a moment."));
         }}
       />

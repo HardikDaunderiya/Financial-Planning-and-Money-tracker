@@ -1,4 +1,4 @@
-import { useRouter, type Href } from "expo-router";
+import { useRouter } from "expo-router";
 import React from "react";
 import { IncomeScreen } from "@/features/profile/screens/income-screen";
 import { useSetup } from "@/features/profile/setup-store";
@@ -8,10 +8,5 @@ export default function IncomeRoute() {
   const router = useRouter();
   const { hydrated } = useSetup();
   if (!hydrated) return null;
-  return (
-    <IncomeScreen
-      today={todayIst()}
-      onContinue={() => router.push("/onboarding/fixed-costs" as unknown as Href)}
-    />
-  );
+  return <IncomeScreen today={todayIst()} onContinue={() => router.push("/onboarding/fixed-costs")} />;
 }

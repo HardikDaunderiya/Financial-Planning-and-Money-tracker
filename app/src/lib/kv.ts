@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { log } from "./log";
 
 /** Keys that other modules must be able to clear (the session clears setup answers on sign-out). */
-export const kvKeys = { setupDraft: "setup-draft" } as const;
+export const kvKeys = { setupDraft: "setup-draft", email: "me.email" } as const;
 
 /**
  * Per-device flags such as "first spend logged" or "notifications asked", and the half-finished setup answers,

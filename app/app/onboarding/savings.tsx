@@ -1,4 +1,4 @@
-import { useRouter, type Href } from "expo-router";
+import { useRouter } from "expo-router";
 import React from "react";
 import { ErrorState } from "@/components/ui/error-state";
 import { Screen } from "@/components/ui/screen";
@@ -31,7 +31,7 @@ export default function SavingsRoute() {
     <SavingsScreen
       today={todayIst()}
       fixedCosts={costs.data ?? []}
-      onContinue={() => router.push("/onboarding/personality" as unknown as Href)}
+      onContinue={() => router.push("/onboarding/personality")}
       onBack={() => router.back()}
     />
   );

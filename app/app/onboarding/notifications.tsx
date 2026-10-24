@@ -1,4 +1,4 @@
-import { useRouter, type Href } from "expo-router";
+import { useRouter } from "expo-router";
 import React from "react";
 import { useProfile } from "@/features/profile/hooks";
 import { allowNotifications } from "@/features/profile/notifications-flow";
@@ -12,7 +12,7 @@ export default function NotificationsRoute() {
   const profile = useProfile();
   const done = async () => {
     await kv.set("notifications-asked", "1");
-    router.replace("/home" as unknown as Href);
+    router.replace("/home");
   };
   return (
     <NotificationsScreen

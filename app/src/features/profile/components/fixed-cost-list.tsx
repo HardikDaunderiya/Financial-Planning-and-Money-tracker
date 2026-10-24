@@ -19,6 +19,14 @@ export const presets: { name: string; amountPaise: number }[] = [
   { name: "Gym", amountPaise: 150000 },
 ];
 
+/** Lowercase the first letter after a verb ("Remove rent") unless the name has capitals of its own (EMI, Wi-Fi). */
+function afterVerb(name: string): string {
+  const second = name.charAt(1);
+  const plain =
+    second !== "" && second === second.toLowerCase() && name.slice(1) === name.slice(1).toLowerCase();
+  return plain ? name.charAt(0).toLowerCase() + name.slice(1) : name;
+}
+
 export function FixedCostRow({
   cost,
   onEdit,
@@ -59,7 +67,7 @@ export function FixedCostRow({
       </Pressable>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Remove ${cost.name.toLowerCase()}`}
+        accessibilityLabel={`Remove ${afterVerb(cost.name)}`}
         onPress={onRemove}
         hitSlop={6}
         style={{ width: touchTarget, height: touchTarget, alignItems: "center", justifyContent: "center" }}

@@ -41,4 +41,29 @@ describe("Me", () => {
     await fireEvent.press(screen.getByRole("button", { name: "Yes, sign out" }));
     await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1));
   });
+
+  it("a rejecting signOut shows the generic error inline and stays usable", async () => {
+    const signOut = jest.fn(() => Promise.reject(new Error("boom")));
+    await render(
+      <Safe>
+        <MeScreen email="a@b.com" profile={null} signOut={signOut} />
+      </Safe>,
+    );
+    await fireEvent.press(screen.getByRole("button", { name: "Sign out" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Yes, sign out" }));
+    expect(await screen.findByText("Something went wrong. Try again in a moment.")).toBeTruthy();
+    expect(screen.queryByText(/boom/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Yes, sign out" })).toBeTruthy();
+  });
+
+  it("shows the email on one line with an ellipsis", async () => {
+    await render(
+      <Safe>
+        <MeScreen email="a@b.com" profile={null} signOut={jest.fn()} />
+      </Safe>,
+    );
+    const node = screen.getByText("a@b.com");
+    expect(node.props.numberOfLines).toBe(1);
+    expect(node.props.ellipsizeMode).toBe("tail");
+  });
 });

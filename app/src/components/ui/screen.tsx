@@ -26,7 +26,7 @@ export function Screen({ children, footer, contentStyle, scrollProps, testID }: 
             paddingBottom: spacing.lg,
             gap: spacing.md,
           },
-          contentStyle,
+          ...(contentStyle ? [contentStyle] : []),
         ]}
         {...scrollProps}
       >

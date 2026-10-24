@@ -20,7 +20,12 @@ jest.mock("@react-native-async-storage/async-storage", () =>
 jest.mock("@react-native-community/netinfo", () =>
   require("@react-native-community/netinfo/jest/netinfo-mock.js"),
 );
-jest.mock("expo-crypto", () => ({ randomUUID: () => "00000000-0000-4000-8000-000000000000" }));
+jest.mock("expo-crypto", () => ({
+  randomUUID: () => "00000000-0000-4000-8000-000000000000",
+  CryptoDigestAlgorithm: { SHA256: "SHA-256" },
+  digestStringAsync: (_algorithm: string, data: string) =>
+    Promise.resolve(require("node:crypto").createHash("sha256").update(data).digest("hex") as string),
+}));
 
 // expo-notifications is phone-only and registers native listeners on import; app code reaches it through
 // lib/notifications (faked in its own tests) and the root layout's handler.

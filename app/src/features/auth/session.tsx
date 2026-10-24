@@ -3,7 +3,7 @@ import { createTokenOwner, type SessionControl } from "@/lib/api";
 import { api, authEvents } from "@/lib/client";
 import { kv, kvKeys } from "@/lib/kv";
 import { log } from "@/lib/log";
-import { persister, queryClient } from "@/lib/query";
+import { closePersistence, openPersistence, persister, queryClient } from "@/lib/query";
 import type { TokenStore, Tokens } from "@/lib/storage";
 import { authApi } from "./api";
 
@@ -48,16 +48,25 @@ export function SessionProvider({
   const [status, setStatus] = useState<SessionStatus>("loading");
   const [email, setEmail] = useState<string | null>(null);
 
-  // Everything tied to the departing user goes: in-memory and persisted query cache, setup answers, email.
-  const forget = useCallback(() => {
+  // Everything tied to the departing user goes: in-memory and persisted query cache, setup answers, email,
+  // per-user flags. It never throws, and callers await it so sign-out finishes only when storage is clean.
+  const forget = useCallback(async () => {
+    closePersistence();
     queryClient.clear();
     setEmail(null);
     setStatus("signedOut");
-    void kv.remove(kvKeys.setupDraft);
-    void kv.remove(kvKeys.email);
-    wipeCache().catch((e: unknown) =>
-      log.warn("session.wipe_failed", { reason: e instanceof Error ? e.name : "unknown" }),
-    );
+    const results = await Promise.allSettled([
+      kv.remove(kvKeys.setupDraft),
+      kv.remove(kvKeys.email),
+      kv.remove(kvKeys.firstSpend),
+      kv.remove(kvKeys.notificationsAsked),
+      wipeCache(),
+    ]);
+    for (const r of results) {
+      if (r.status === "rejected") {
+        log.warn("session.wipe_failed", { reason: r.reason instanceof Error ? r.reason.name : "unknown" });
+      }
+    }
   }, [wipeCache]);
 
   useEffect(() => {
@@ -79,11 +88,12 @@ export function SessionProvider({
     };
   }, [control]);
 
-  useEffect(() => authEvents.onSignedOut(forget), [forget]);
+  useEffect(() => authEvents.onSignedOut(() => void forget()), [forget]);
 
   const signIn = useCallback(
     async (tokens: Tokens, who?: string) => {
       await control.signIn(tokens);
+      openPersistence();
       if (who) {
         await kv.set(kvKeys.email, who);
         setEmail(who);
@@ -95,7 +105,11 @@ export function SessionProvider({
   );
 
   const signOut = useCallback(async () => {
-    await control.signOut(logout, forget);
+    let wiped: Promise<void> = Promise.resolve();
+    await control.signOut(logout, () => {
+      wiped = forget();
+    });
+    await wiped;
     log.info("auth.signed_out");
   }, [control, logout, forget]);
 

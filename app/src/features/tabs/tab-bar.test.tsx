@@ -58,4 +58,31 @@ describe("TabBar", () => {
     await fireEvent.press(screen.getByRole("tab", { name: "Goals" }));
     expect(navigate).toHaveBeenCalledWith("goals");
   });
+
+  it("keeps the centre add button outside the tablist", async () => {
+    const { p } = props(0);
+    await render(
+      <Safe>
+        <TabBar {...p} />
+      </Safe>,
+    );
+    type Node = {
+      props?: { accessibilityRole?: string; accessibilityLabel?: string };
+      children?: (Node | string)[] | null;
+    };
+    const find = (n: Node | string, pred: (x: Node) => boolean): Node | null => {
+      if (typeof n === "string") return null;
+      if (pred(n)) return n;
+      for (const c of n.children ?? []) {
+        const hit = find(c, pred);
+        if (hit) return hit;
+      }
+      return null;
+    };
+    const root = screen.toJSON() as unknown as Node;
+    const list = find(root, (n) => n.props?.accessibilityRole === "tablist");
+    expect(list).not.toBeNull();
+    expect(find(list as Node, (n) => n.props?.accessibilityLabel === "Add a spend")).toBeNull();
+    expect(find(root, (n) => n.props?.accessibilityLabel === "Add a spend")).not.toBeNull();
+  });
 });

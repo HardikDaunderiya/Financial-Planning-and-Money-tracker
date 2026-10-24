@@ -12,6 +12,7 @@ import { HomeScreen } from "./home-screen";
 
 jest.mock("@/features/budget/api", () => ({ budgetApi: { getToday: jest.fn(), setFirstCycle: jest.fn() } }));
 jest.mock("@/lib/kv", () => ({
+  ...jest.requireActual<typeof import("@/lib/kv")>("@/lib/kv"),
   kv: {
     get: jest.fn(() => Promise.resolve(null)),
     set: jest.fn(() => Promise.resolve()),
@@ -45,7 +46,9 @@ const exampleDay: Today = {
 };
 
 async function renderHome(
-  qc = new QueryClient({ defaultOptions: { queries: { retry: false, networkMode: "offlineFirst" } } }),
+  qc = new QueryClient({
+    defaultOptions: { queries: { retry: false, networkMode: "offlineFirst", gcTime: Infinity } },
+  }),
 ) {
   await render(
     <Safe>
@@ -90,6 +93,7 @@ describe("Home (APP-11)", () => {
     expect(await screen.findByText("Day one")).toBeTruthy();
     expect(screen.getByText("Hi, I'm your Gullak. Log a spend and I'll keep count.")).toBeTruthy();
     expect(screen.getByText("Your streak starts tonight if you stay under")).toBeTruthy();
+    expect(screen.queryByText("₹0 spent")).toBeNull();
     expect(screen.getByText("Your spends show up here. Log one as soon as you pay.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Add first spend" })).toBeDisabled();
   });
@@ -133,7 +137,7 @@ describe("Home (APP-11)", () => {
 
   it("offline with cached data shows the figures and 'Updated 2 hours ago'", async () => {
     const qc = new QueryClient({
-      defaultOptions: { queries: { retry: false, networkMode: "offlineFirst" } },
+      defaultOptions: { queries: { retry: false, networkMode: "offlineFirst", gcTime: Infinity } },
     });
     qc.setQueryData(todayKey, exampleDay, { updatedAt: new Date("2026-10-23T06:00:00Z").getTime() });
     onlineManager.setOnline(false);
@@ -146,7 +150,9 @@ describe("Home (APP-11)", () => {
 
   it("a failed refresh keeps the cached figures with a passive notice", async () => {
     const qc = new QueryClient({
-      defaultOptions: { queries: { retry: false, networkMode: "offlineFirst", staleTime: 0 } },
+      defaultOptions: {
+        queries: { retry: false, networkMode: "offlineFirst", gcTime: Infinity, staleTime: 0 },
+      },
     });
     qc.setQueryData(todayKey, exampleDay, { updatedAt: Date.now() - 10 * 60_000 });
     mocked.getToday.mockRejectedValue(new NetworkError("flaky"));
@@ -162,7 +168,7 @@ describe("Home (APP-11)", () => {
     expect(await screen.findByTestId("redirect-onboarding")).toBeTruthy();
   });
 
-  it("foregroundRefetchesToday", async () => {
+  it("foregroundRefetchesToday once the last success is older than 30 seconds", async () => {
     let listener: ((s: string) => void) | null = null;
     const spy = jest.spyOn(AppState, "addEventListener").mockImplementation((_t, fn) => {
       listener = fn as (s: string) => void;
@@ -171,8 +177,48 @@ describe("Home (APP-11)", () => {
     mocked.getToday.mockResolvedValue(exampleDay);
     await renderHome();
     await screen.findByText("₹413");
+    const real = Date.now();
+    const clock = jest.spyOn(Date, "now").mockReturnValue(real + 31_000);
     await act(() => listener?.("active"));
     await waitFor(() => expect(mocked.getToday).toHaveBeenCalledTimes(2));
+    clock.mockRestore();
+    spy.mockRestore();
+  });
+
+  it("20 rapid foreground events cause at most one request", async () => {
+    let listener: ((s: string) => void) | null = null;
+    const spy = jest.spyOn(AppState, "addEventListener").mockImplementation((_t, fn) => {
+      listener = fn as (s: string) => void;
+      return { remove: jest.fn() };
+    });
+    mocked.getToday.mockResolvedValue(exampleDay);
+    await renderHome();
+    await screen.findByText("₹413");
+    mocked.getToday.mockClear();
+    const real = Date.now();
+    const clock = jest.spyOn(Date, "now").mockReturnValue(real + 31_000);
+    await act(() => {
+      for (let i = 0; i < 20; i++) listener?.("active");
+    });
+    await act(() => new Promise((r) => setTimeout(r, 50)));
+    expect(mocked.getToday.mock.calls.length).toBeLessThanOrEqual(1);
+    clock.mockRestore();
+    spy.mockRestore();
+  });
+
+  it("a fresh success skips the foreground refetch", async () => {
+    let listener: ((s: string) => void) | null = null;
+    const spy = jest.spyOn(AppState, "addEventListener").mockImplementation((_t, fn) => {
+      listener = fn as (s: string) => void;
+      return { remove: jest.fn() };
+    });
+    mocked.getToday.mockResolvedValue(exampleDay);
+    await renderHome();
+    await screen.findByText("₹413");
+    mocked.getToday.mockClear();
+    await act(() => listener?.("active"));
+    await act(() => new Promise((r) => setTimeout(r, 30)));
+    expect(mocked.getToday).not.toHaveBeenCalled();
     spy.mockRestore();
   });
 });

@@ -16,6 +16,7 @@ export type Today = {
 };
 
 export const budgetApi = {
-  getToday: () => api.get<Today>("/budget/today"),
+  /** Raw body: `useToday` validates it with `parseToday` before anything renders. */
+  getToday: () => api.get<unknown>("/budget/today"),
   setFirstCycle: (moneyLeftPaise: number) => api.put<Today>("/budget/first-cycle", { moneyLeftPaise }),
 };

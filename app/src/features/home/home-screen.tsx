@@ -1,6 +1,6 @@
 import { Redirect } from "expo-router";
 import { onlineManager } from "@tanstack/react-query";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { AppState, View } from "react-native";
 import { ErrorState } from "@/components/ui/error-state";
 import { Screen } from "@/components/ui/screen";
@@ -11,16 +11,23 @@ import { useToday } from "@/features/budget/hooks";
 import { describeError, isApiError } from "@/lib/api-errors";
 import { formatDay, greeting, relativeTime, todayIst } from "@/lib/dates";
 import { messageFor } from "@/lib/errors";
-import { kv } from "@/lib/kv";
+import { kv, kvKeys } from "@/lib/kv";
 import { spacing } from "@/theme";
 import { Hero } from "./hero";
 import { TodaySection } from "./today-section";
 
-export const FIRST_SPEND_FLAG = "first-spend-logged";
+const FOREGROUND_REFETCH_MIN_MS = 30_000;
+
+export const FIRST_SPEND_FLAG = kvKeys.firstSpend;
 
 export function HomeScreen({ now = new Date() }: { now?: Date }) {
   const today = useToday();
   const { refetch } = today;
+  // The foreground handler reads the latest state through a ref, so the listener is attached once.
+  const latest = useRef({ fetching: today.isFetching, updatedAt: today.dataUpdatedAt });
+  useEffect(() => {
+    latest.current = { fetching: today.isFetching, updatedAt: today.dataUpdatedAt };
+  });
   // offlineFirst still tries once while offline, so "paused" alone would miss the first seconds of being offline.
   const [online, setOnline] = useState(() => onlineManager.isOnline());
   useEffect(() => {
@@ -38,7 +45,10 @@ export function HomeScreen({ now = new Date() }: { now?: Date }) {
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") void refetch();
+      if (state !== "active") return;
+      const { fetching, updatedAt } = latest.current;
+      if (fetching || Date.now() - updatedAt < FOREGROUND_REFETCH_MIN_MS) return;
+      void refetch({ cancelRefetch: false });
     });
     return () => sub.remove();
   }, [refetch]);

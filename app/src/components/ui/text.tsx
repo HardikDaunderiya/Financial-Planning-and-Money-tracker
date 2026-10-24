@@ -11,7 +11,12 @@ export type TextProps = RNTextProps & {
 export function Text({ variant = "body", color, align, style, ...props }: TextProps) {
   return (
     <RNText
-      style={[type[variant], color ? { color } : null, align ? { textAlign: align } : null, style]}
+      style={[
+        type[variant],
+        ...(color ? [{ color }] : []),
+        ...(align ? [{ textAlign: align }] : []),
+        ...(style ? [style] : []),
+      ]}
       {...props}
     />
   );

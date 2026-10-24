@@ -23,6 +23,7 @@ export function MeScreen({
 }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
   const personality = personalities.find((p) => p.id === profile?.personality)?.label;
   return (
     <Screen testID="me">
@@ -39,7 +40,7 @@ export function MeScreen({
         }}
       >
         {email ? (
-          <Text variant="body" selectable>
+          <Text variant="body" selectable numberOfLines={1} ellipsizeMode="tail">
             {email}
           </Text>
         ) : null}
@@ -52,13 +53,22 @@ export function MeScreen({
       {confirming ? (
         <View style={{ gap: spacing.sm }}>
           <Text variant="bodyStrong">Sign out of Gullak on this phone?</Text>
+          {failed ? (
+            <Text variant="label" color={colors.bad} accessibilityRole="alert">
+              Something went wrong. Try again in a moment.
+            </Text>
+          ) : null}
           <Button
             title="Yes, sign out"
             variant="danger"
             loading={busy}
             onPress={() => {
+              if (busy) return;
               setBusy(true);
-              void signOut().finally(() => setBusy(false));
+              setFailed(false);
+              signOut()
+                .catch(() => setFailed(true))
+                .finally(() => setBusy(false));
             }}
           />
           <Button title="Keep me signed in" variant="secondary" onPress={() => setConfirming(false)} />

@@ -188,4 +188,61 @@ describe("session", () => {
     set.mockRestore();
     remove.mockRestore();
   });
+
+  it("signOut resolves only after the persisted wipe and every per-user kv removal finished", async () => {
+    let release: () => void = () => undefined;
+    const wipe = jest.fn(() => new Promise<void>((r) => (release = r)));
+    const removed: string[] = [];
+    const remove = jest.spyOn(kv, "remove").mockImplementation((k) => {
+      removed.push(k);
+      return Promise.resolve();
+    });
+    let session: ReturnType<typeof useSession> | undefined;
+    await render(
+      <SessionProvider
+        store={store({ accessToken: "A", refreshToken: "R" })}
+        logout={() => Promise.resolve()}
+        wipeCache={wipe}
+      >
+        <Probe onReady={(x) => (session = x)} />
+      </SessionProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("signedIn"));
+    let done = false;
+    await act(async () => {
+      void session?.signOut().then(() => (done = true));
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    expect(wipe).toHaveBeenCalledTimes(1);
+    expect(done).toBe(false);
+    await act(async () => {
+      release();
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    expect(done).toBe(true);
+    expect(removed).toEqual(
+      expect.arrayContaining(["setup-draft", "me.email", "first-spend-logged", "notifications-asked"]),
+    );
+    remove.mockRestore();
+  });
+
+  it("a failing wipe still completes sign-out and logs only a reason", async () => {
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+    let session: ReturnType<typeof useSession> | undefined;
+    await render(
+      <SessionProvider
+        store={store({ accessToken: "A", refreshToken: "R" })}
+        logout={() => Promise.resolve()}
+        wipeCache={() => Promise.reject(new Error("disk full secret@x.com"))}
+      >
+        <Probe onReady={(x) => (session = x)} />
+      </SessionProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("signedIn"));
+    await act(() => session?.signOut() ?? Promise.resolve());
+    expect(screen.getByTestId("status")).toHaveTextContent("signedOut");
+    expect(JSON.stringify(warn.mock.calls)).toContain("session.wipe_failed");
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("secret@x.com");
+    warn.mockRestore();
+  });
 });

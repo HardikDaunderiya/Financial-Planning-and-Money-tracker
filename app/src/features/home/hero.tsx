@@ -45,10 +45,11 @@ export function Hero({ today, firstRun }: { today: Today; firstRun: boolean }) {
         <Text variant="bodyMuted">{`left of ${formatRupees(today.budgetPaise)} today`}</Text>
       </View>
       <ProgressBar value={used} label="Budget used" tone={tone} />
-      <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+      {firstRun ? (
+        <Text variant="labelMuted">Your streak starts tonight if you stay under</Text>
+      ) : (
         <Text variant="label">{`${formatRupees(today.spentPaise)} spent`}</Text>
-        <Text variant="labelMuted">{firstRun ? "Your streak starts tonight if you stay under" : ""}</Text>
-      </View>
+      )}
       <Text variant="caption">{`${today.daysLeft} day${today.daysLeft === 1 ? "" : "s"} left in this cycle, until ${formatDay(today.cycleEnd)}`}</Text>
     </View>
   );

@@ -17,8 +17,9 @@ export default function PersonalityRoute() {
       fixedPaise={fixedPaise}
       finish={finish}
       onDone={() => {
-        reset();
+        // Navigate first, then clear the draft, so the old screen never renders an emptied draft.
         router.replace("/onboarding/notifications" as unknown as Href);
+        reset();
       }}
       onBack={() => router.back()}
     />

@@ -5,11 +5,12 @@ import { Screen } from "@/components/ui/screen";
 import { StepHeader } from "@/components/ui/step-header";
 import { Text } from "@/components/ui/text";
 import { describeError } from "@/lib/api-errors";
-import { firstCyclePreview } from "@/lib/budget";
+import { firstCyclePreview, perDayPreview, realityCheck } from "@/lib/budget";
 import { messageFor } from "@/lib/errors";
 import { formatRupees } from "@/lib/money";
 import { colors, spacing } from "@/theme";
 import type { ProfileRequest } from "../api";
+import { FIRST_CYCLE_NOT_SAVED, FirstCycleNotSavedError } from "../finish-errors";
 import { PersonalityPicker } from "../components/personality-picker";
 import { TimePicker, morningOptions, nightOptions } from "../components/time-picker";
 import { paydayIsComplete, useSetup } from "../setup-store";
@@ -27,13 +28,25 @@ type Props = {
 export function PersonalityScreen({ today, fixedPaise, finish, onDone, onBack }: Props) {
   const { draft, set } = useSetup();
   const [busy, setBusy] = useState(false);
+  const [finished, setFinished] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const payday = paydayIsComplete(draft.payday) ? draft.payday : { rule: "FIXED_DAY" as const, day: 1 };
+  const freePaise = draft.incomePaise - fixedPaise - draft.savingsPaise;
+  const next = perDayPreview({ freePaise, today, payday });
+  const verdict = realityCheck({
+    incomePaise: draft.incomePaise,
+    fixedPaise,
+    savingsPaise: draft.savingsPaise,
+    cycleDays: next.cycleDays,
+  }).verdict;
+  const base = firstCyclePreview({ monthlySpendablePaise: freePaise, today, payday });
+  // The money-left answer counts only while its card is on screen (step 3 shows it when pro-rated and possible).
+  const answer = verdict !== "notPossible" && base.proRated ? draft.moneyLeftPaise : null;
   const preview = firstCyclePreview({
-    monthlySpendablePaise: draft.incomePaise - fixedPaise - draft.savingsPaise,
+    monthlySpendablePaise: freePaise,
     today,
     payday,
-    ...(draft.moneyLeftPaise !== null ? { moneyLeftPaise: draft.moneyLeftPaise } : {}),
+    ...(answer !== null ? { moneyLeftPaise: answer } : {}),
   });
 
   async function start() {
@@ -49,15 +62,19 @@ export function PersonalityScreen({ today, fixedPaise, finish, onDone, onBack }:
         morningTime: draft.morningTime,
         nightTime: draft.nightTime,
         timezone: "Asia/Kolkata",
-        moneyLeftPaise: draft.moneyLeftPaise,
+        moneyLeftPaise: answer,
       });
+      setFinished(true);
       onDone();
     } catch (e) {
-      setError(describeError(e, messageFor));
+      setError(e instanceof FirstCycleNotSavedError ? FIRST_CYCLE_NOT_SAVED : describeError(e, messageFor));
     } finally {
       setBusy(false);
     }
   }
+
+  // Once finished the draft is reset; render nothing so no "Start with ₹0 today" flashes.
+  if (finished) return null;
 
   return (
     <Screen

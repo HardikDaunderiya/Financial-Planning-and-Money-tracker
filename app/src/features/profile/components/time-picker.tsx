@@ -10,17 +10,19 @@ function label(t: string): string {
   return `${hour12}:${String(m).padStart(2, "0")} ${h < 12 ? "am" : "pm"}`;
 }
 
-function range(fromHour: number, toHour: number): string[] {
+/** Half-hour options from `from` to `to` inclusive, both given as "HH:MM". */
+function range(from: string, to: string): string[] {
+  const toMinutes = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
   const out: string[] = [];
-  for (let h = fromHour; h <= toHour; h++)
-    for (const m of [0, 30])
-      if (!(h === toHour && m === 30))
-        out.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
+  for (let m = toMinutes(from); m <= toMinutes(to); m += 30) {
+    out.push(`${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`);
+  }
   return out;
 }
 
-export const morningOptions = range(6, 11);
-export const nightOptions = range(19, 23);
+// Spec 2.7: no messages between 23:00 and 07:00.
+export const morningOptions = range("07:00", "11:00");
+export const nightOptions = range("19:00", "22:30");
 
 export function TimePicker({
   title,

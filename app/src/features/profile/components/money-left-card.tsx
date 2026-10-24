@@ -17,9 +17,10 @@ export function MoneyLeftCard({
   preview: FirstCyclePreview;
   edited: boolean;
   maxPaise: number;
-  onChange: (paise: number) => void;
+  /** `null` puts back our own guess. */
+  onChange: (paise: number | null) => void;
 }) {
-  const [typing, setTyping] = useState<string | null>(null);
+  const [typing, setTyping] = useState<{ text: string; restore: number | null } | null>(null);
   return (
     <View
       style={{
@@ -40,16 +41,23 @@ export function MoneyLeftCard({
             label="Money left until payday"
             prefix="₹"
             large
-            value={typing}
-            onChangeText={(t) => setTyping(t.replace(/[^\d,]/g, ""))}
+            value={typing.text}
+            onChangeText={(raw) => {
+              const text = raw.replace(/[^\d,]/g, "");
+              setTyping({ ...typing, text });
+              // Every valid change commits at once, so a typed value is never lost; an empty field changes nothing.
+              if (/\d/.test(text)) onChange(Math.min(maxPaise, parseRupeesToPaise(text)));
+            }}
             keyboardType="number-pad"
             inputMode="numeric"
             autoFocus
           />
+          <Button title="Done" onPress={() => setTyping(null)} />
           <Button
-            title="Done"
+            title="Cancel"
+            variant="ghost"
             onPress={() => {
-              onChange(Math.min(maxPaise, parseRupeesToPaise(typing)));
+              onChange(typing.restore);
               setTyping(null);
             }}
           />
@@ -60,7 +68,9 @@ export function MoneyLeftCard({
           <Button
             title="Change"
             variant="secondary"
-            onPress={() => setTyping(String(preview.poolPaise / 100))}
+            onPress={() =>
+              setTyping({ text: String(preview.poolPaise / 100), restore: edited ? preview.poolPaise : null })
+            }
           />
         </View>
       )}

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Screen } from "@/components/ui/screen";
 import { StepHeader } from "@/components/ui/step-header";
 import { Text } from "@/components/ui/text";
-import { firstCyclePreview, perDayPreview, realityCheck, wholeRupees } from "@/lib/budget";
+import { firstCyclePreview, perDayPreview, realityCheck, suggestedSavings } from "@/lib/budget";
 import { formatRupees } from "@/lib/money";
 import { colors, spacing } from "@/theme";
 import type { FixedCost } from "../api";
@@ -12,8 +12,6 @@ import { MoneyLeftCard } from "../components/money-left-card";
 import { RealityCheck } from "../components/reality-check";
 import { SavingsStepper } from "../components/savings-stepper";
 import { paydayIsComplete, useSetup } from "../setup-store";
-
-const MIN_PER_DAY_PAISE = 25000; // the "tight" line
 
 function essentialsLabel(costs: FixedCost[]): string {
   if (costs.length === 0) return "No fixed costs";
@@ -47,12 +45,11 @@ export function SavingsScreen({
     cycleDays: next.cycleDays,
   });
   const maxSavings = Math.max(0, draft.incomePaise - fixedPaise);
-  const suggested = wholeRupees(
-    Math.max(
-      0,
-      Math.floor((draft.incomePaise - fixedPaise - MIN_PER_DAY_PAISE * next.cycleDays) / 100000) * 100000,
-    ),
-  );
+  const suggested = suggestedSavings({
+    incomePaise: draft.incomePaise,
+    fixedPaise,
+    cycleDays: next.cycleDays,
+  });
   const preview = firstCyclePreview({
     monthlySpendablePaise: check.freePaise,
     today,
@@ -67,7 +64,13 @@ export function SavingsScreen({
       footer={
         <View style={{ gap: spacing.sm }}>
           <Button
-            title={blocked ? "Lower your savings to continue" : "Continue"}
+            title={
+              blocked
+                ? suggested === 0
+                  ? "Lower your fixed costs to continue"
+                  : "Lower your savings to continue"
+                : "Continue"
+            }
             onPress={onContinue}
             disabled={blocked}
           />

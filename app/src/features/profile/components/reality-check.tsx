@@ -29,7 +29,11 @@ export function RealityCheck({
       ? `You keep ${formatRupees(perDayPaise)} a day for everything else`
       : verdict === "tight"
         ? `${formatRupees(perDayPaise)} a day covers chai and the metro, not much else`
-        : `Only ${formatRupees(essentialsLeftPaise)} is left after essentials. Try ${formatRupees(suggestedSavingsPaise)} or less.`;
+        : essentialsLeftPaise < 0
+          ? "Your fixed costs are more than your salary"
+          : suggestedSavingsPaise === 0
+            ? `Only ${formatRupees(essentialsLeftPaise)} is left after essentials. Lower your fixed costs to continue.`
+            : `Only ${formatRupees(essentialsLeftPaise)} is left after essentials. Try ${formatRupees(suggestedSavingsPaise)} or less.`;
   return (
     <View
       accessibilityRole="summary"

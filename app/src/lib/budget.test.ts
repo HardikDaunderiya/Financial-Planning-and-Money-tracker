@@ -1,4 +1,10 @@
-import { firstCyclePreview, perDayPreview, realityCheck } from "./budget";
+import {
+  TIGHT_PER_DAY_PAISE,
+  firstCyclePreview,
+  perDayPreview,
+  realityCheck,
+  suggestedSavings,
+} from "./budget";
 
 describe("first-cycle preview (BUD-32)", () => {
   it("pro-rates the pool by the days left and rounds down to whole rupees", () => {
@@ -64,5 +70,21 @@ describe("setup previews", () => {
       realityCheck({ incomePaise: 5000000, fixedPaise: 1500000, savingsPaise: 3600000, cycleDays: 30 })
         .verdict,
     ).toBe("notPossible");
+  });
+});
+
+describe("suggested savings and the tight line (fix round)", () => {
+  it("the example user gets ₹27,000", () => {
+    expect(suggestedSavings({ incomePaise: 5000000, fixedPaise: 1500000, cycleDays: 30 })).toBe(2700000);
+  });
+
+  it("essentials left under ₹7,500 suggest 0", () => {
+    expect(suggestedSavings({ incomePaise: 1000000, fixedPaise: 300000 + 1, cycleDays: 30 })).toBe(0);
+    expect(suggestedSavings({ incomePaise: 1000000, fixedPaise: 1000000, cycleDays: 30 })).toBe(0);
+    expect(suggestedSavings({ incomePaise: 1000000, fixedPaise: 2000000, cycleDays: 30 })).toBe(0);
+  });
+
+  it("the tight line is ₹250 a day", () => {
+    expect(TIGHT_PER_DAY_PAISE).toBe(25000);
   });
 });

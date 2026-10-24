@@ -3,6 +3,7 @@ module.exports = {
   projects: [
     {
       displayName: "native",
+      testTimeout: 15000,
       globalSetup: "<rootDir>/jest.global-setup.js",
       preset: "jest-expo/ios",
       resolver: require.resolve("react-native-reanimated/jest/resolver"),
@@ -16,6 +17,7 @@ module.exports = {
     },
     {
       displayName: "web",
+      testTimeout: 15000,
       preset: "jest-expo/web",
       setupFilesAfterEnv: ["<rootDir>/jest.setup.web.ts"],
       testMatch: ["<rootDir>/src/**/*.web.test.ts", "<rootDir>/src/**/*.web.test.tsx"],

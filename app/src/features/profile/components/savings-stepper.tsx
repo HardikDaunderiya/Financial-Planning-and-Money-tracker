@@ -15,7 +15,7 @@ export function SavingsStepper({
   max: number;
   onChange: (paise: number) => void;
 }) {
-  const [typing, setTyping] = useState<string | null>(null);
+  const [typing, setTyping] = useState<{ text: string; opened: number } | null>(null);
   if (typing !== null) {
     return (
       <View style={{ gap: spacing.sm }}>
@@ -23,16 +23,23 @@ export function SavingsStepper({
           label="Save every month"
           prefix="₹"
           large
-          value={typing}
-          onChangeText={(t) => setTyping(t.replace(/[^\d,]/g, ""))}
+          value={typing.text}
+          onChangeText={(raw) => {
+            const text = raw.replace(/[^\d,]/g, "");
+            setTyping({ ...typing, text });
+            // Every valid change commits at once, so a typed value is never lost; an empty field changes nothing.
+            if (/\d/.test(text)) onChange(Math.min(max, parseRupeesToPaise(text)));
+          }}
           keyboardType="number-pad"
           inputMode="numeric"
           autoFocus
         />
+        <Button title="Done" onPress={() => setTyping(null)} />
         <Button
-          title="Done"
+          title="Cancel"
+          variant="ghost"
           onPress={() => {
-            onChange(Math.min(max, parseRupeesToPaise(typing)));
+            onChange(typing.opened);
             setTyping(null);
           }}
         />
@@ -47,7 +54,7 @@ export function SavingsStepper({
       min={0}
       max={max}
       onChange={onChange}
-      onPressValue={() => setTyping(String(valuePaise / 100))}
+      onPressValue={() => setTyping({ text: String(valuePaise / 100), opened: valuePaise })}
     />
   );
 }

@@ -48,6 +48,8 @@ describe("daily messages", () => {
     for (const p of ["CHILL", "SAVAGE", "MOM", "HYPE"] as const) {
       expect(notificationCopy[p].morning.body).not.toMatch(/₹|\d/);
       expect(notificationCopy[p].night.body).not.toMatch(/₹|\d/);
+      expect(notificationCopy[p].morning.title).not.toMatch(/₹|\d/);
+      expect(notificationCopy[p].night.title).not.toMatch(/₹|\d/);
     }
   });
 });

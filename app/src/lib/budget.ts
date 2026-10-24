@@ -73,6 +73,19 @@ export function perDayPreview(input: { freePaise: number; today: string; payday:
   };
 }
 
+/** Under this many paise a day the setup says "tight" (₹250). */
+export const TIGHT_PER_DAY_PAISE = 25000;
+
+/** The largest whole ₹1,000 of savings that still leaves the tight line per day; 0 when essentials leave under that. */
+export function suggestedSavings(input: {
+  incomePaise: number;
+  fixedPaise: number;
+  cycleDays: number;
+}): number {
+  const left = input.incomePaise - input.fixedPaise - TIGHT_PER_DAY_PAISE * input.cycleDays;
+  return left <= 0 ? 0 : Math.floor(left / 100000) * 100000;
+}
+
 export type Verdict = "doable" | "tight" | "notPossible";
 
 /** The setup reality check (APP-20): nothing free → not possible; under ₹250 a day → tight; else doable. */
@@ -85,6 +98,7 @@ export function realityCheck(input: {
   const freePaise = input.incomePaise - input.fixedPaise - input.savingsPaise;
   const perDayPaise = freePaise > 0 ? wholeRupees(Math.floor(freePaise / input.cycleDays)) : 0;
   const maxSavingsPaise = Math.max(0, input.incomePaise - input.fixedPaise - 100);
-  const verdict: Verdict = freePaise <= 0 ? "notPossible" : perDayPaise < 25000 ? "tight" : "doable";
+  const verdict: Verdict =
+    freePaise <= 0 ? "notPossible" : perDayPaise < TIGHT_PER_DAY_PAISE ? "tight" : "doable";
   return { verdict, freePaise, perDayPaise, maxSavingsPaise };
 }

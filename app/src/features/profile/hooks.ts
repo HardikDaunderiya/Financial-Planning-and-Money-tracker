@@ -1,8 +1,9 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { budgetApi } from "@/features/budget/api";
 import { isApiError } from "@/lib/api-errors";
 import { fixedCostApi, profileApi, type FixedCost, type Profile, type ProfileRequest } from "./api";
+import { FirstCycleNotSavedError } from "./finish-errors";
 import type { FinishSetupInput } from "./screens/personality-screen";
 
 export const profileKeys = { profile: ["profile"] as const, fixedCosts: ["fixed-costs"] as const };
@@ -89,19 +90,32 @@ export function usePutProfile() {
   });
 }
 
-/** PUT the profile, then pin the first cycle's pool when the user changed the money-left figure. */
+/**
+ * PUT the profile, then pin the first cycle's pool when the user gave a money-left figure. If the override fails
+ * after the profile saved, a retry sends only the override (the ref remembers the profile is saved).
+ */
 export function useFinishSetup() {
   const qc = useQueryClient();
+  const profileSaved = useRef(false);
   return useCallback(
     async ({ moneyLeftPaise, ...profile }: FinishSetupInput) => {
-      const saved = await profileApi.put(profile);
-      qc.setQueryData(profileKeys.profile, saved);
+      if (!profileSaved.current) {
+        const saved = await profileApi.put(profile);
+        profileSaved.current = true;
+        qc.setQueryData(profileKeys.profile, saved);
+      }
       if (moneyLeftPaise !== null) {
-        const today = await budgetApi.setFirstCycle(moneyLeftPaise);
+        let today;
+        try {
+          today = await budgetApi.setFirstCycle(moneyLeftPaise);
+        } catch {
+          throw new FirstCycleNotSavedError();
+        }
         qc.setQueryData(["today"], today);
       } else {
         await qc.invalidateQueries({ queryKey: ["today"] });
       }
+      profileSaved.current = false;
     },
     [qc],
   );

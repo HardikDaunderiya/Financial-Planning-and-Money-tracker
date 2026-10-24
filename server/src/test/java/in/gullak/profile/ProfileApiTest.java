@@ -1,5 +1,14 @@
 package in.gullak.profile;
 
+import org.springframework.http.MediaType;
+import static org.assertj.core.api.Assertions.assertThat;
+import java.util.concurrent.Future;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Callable;
+import java.util.List;
+import java.util.ArrayList;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -87,5 +96,28 @@ class ProfileApiTest extends ApiTest {
     private static String withField(String override) {
         String key = override.substring(0, override.indexOf(':'));
         return EXAMPLE_PROFILE.replaceFirst(java.util.regex.Pattern.quote(key) + ":(\"[^\"]*\"|[0-9.-]+)", override);
+    }
+
+    @Test
+    void parallelFirstTimePutsAllSucceedWithOneRow() throws Exception { // API-PRO-02 under a race
+        TestUser u = signIn();
+        ExecutorService pool = Executors.newFixedThreadPool(4);
+        try {
+            CountDownLatch start = new CountDownLatch(1);
+            Callable<Integer> call = () -> {
+                start.await();
+                return putProfile(u, EXAMPLE_PROFILE).andReturn().getResponse().getStatus();
+            };
+            List<Future<Integer>> futures = List.of(call, call, call, call).stream().map(pool::submit).toList();
+            start.countDown();
+            List<Integer> statuses = new ArrayList<>();
+            for (Future<Integer> f : futures) {
+                statuses.add(f.get());
+            }
+            assertThat(statuses).containsOnly(200);
+            assertThat(jdbc.sql("select count(*) from profiles where user_id = ?").param(u.id()).query(Long.class).single()).isEqualTo(1L);
+        } finally {
+            pool.shutdownNow();
+        }
     }
 }

@@ -22,6 +22,8 @@ export GULLAK_OTP_PEPPER=$(openssl rand -base64 48)
 ./gradlew bootRun --args='--spring.profiles.active=local'
 ```
 
+Sign-in codes: `curl -X POST localhost:8080/api/v1/auth/dev/otp -H 'content-type: application/json' -d '{"email":"you@example.com"}'`.
+
 Secrets come only from environment variables. Never commit them.
 
 ### Configuration
@@ -51,6 +53,8 @@ The `prod` profile also needs a real OTP mailer. Until one exists (Plan 8) it fa
 | GET, POST | /api/v1/me/fixed-costs | list, add |
 | PATCH, DELETE | /api/v1/me/fixed-costs/{id} | edit, remove |
 | GET | /api/v1/budget/today | `date, budgetPaise, spentPaise, leftPaise, overPaise, poolOverPaise, mood, line, daysLeft, cycleStart, cycleEnd` |
+| PUT | /api/v1/budget/first-cycle | `{moneyLeftPaise}` → today; pins the pool of the user's first open cycle (spec 2.1); 422 `FIRST_CYCLE_OVER` afterwards |
+| POST | /api/v1/auth/dev/otp | **`local` profile only.** `{email}` → `{code}`: the last code the in-memory mailer "sent" |
 
 All amounts are paise, sent as JSON numbers (strings are rejected). Request bodies over 64 KB are 413 `TOO_LARGE`. Errors are `{code, message}`; see `server/src/main/java/in/gullak/common/error/ErrorCode.java`.
 

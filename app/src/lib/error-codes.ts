@@ -16,6 +16,7 @@ export const ERROR_CODES = [
   "TOO_LARGE",
   "NOT_POSSIBLE",
   "SETUP_INCOMPLETE",
+  "FIRST_CYCLE_OVER",
   "INTERNAL",
 ] as const;
 

@@ -21,6 +21,7 @@ const messages: Record<ErrorCode, string> = {
   TOO_LARGE: "That is too big to send",
   NOT_POSSIBLE: "Those numbers do not add up",
   SETUP_INCOMPLETE: "Finish setup first",
+  FIRST_CYCLE_OVER: "Your first cycle has ended, so this can no longer be changed",
   INTERNAL: GENERIC,
 };
 

@@ -1,5 +1,13 @@
 package in.gullak.profile;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import java.util.concurrent.Future;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Callable;
+import java.util.List;
+import java.util.ArrayList;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -96,5 +104,41 @@ class FixedCostApiTest extends ApiTest {
     private org.springframework.test.web.servlet.ResultActions edit(TestUser u, String id, String json) throws Exception {
         return mvc.perform(patch("/api/v1/me/fixed-costs/" + id).with(auth(u))
             .contentType(MediaType.APPLICATION_JSON).content(json));
+    }
+
+    @Test
+    void concurrentAddsCannotTogetherLeaveNothingToSpend() throws Exception { // API-FC-08 under a race
+        TestUser u = signIn();
+        putProfile(u, EXAMPLE_PROFILE).andExpect(status().isOk()); // ₹50,000 income, ₹20,000 savings, no fixed costs yet
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            CountDownLatch start = new CountDownLatch(1);
+            Callable<Integer> call = () -> {
+                start.await();
+                return mvc.perform(post("/api/v1/me/fixed-costs").with(auth(u)).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Big\",\"amountPaise\":2000000}"))
+                    .andReturn().getResponse().getStatus();
+            };
+            List<Future<Integer>> futures = List.of(pool.submit(call), pool.submit(call));
+            start.countDown();
+            List<Integer> statuses = new ArrayList<>();
+            for (Future<Integer> f : futures) {
+                statuses.add(f.get());
+            }
+            assertThat(statuses).containsExactlyInAnyOrder(201, 422); // each alone fits; together they do not
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void impossibleCostHasItsOwnMessage() throws Exception {
+        TestUser u = signIn();
+        putProfile(u, EXAMPLE_PROFILE).andExpect(status().isOk());
+        mvc.perform(post("/api/v1/me/fixed-costs").with(auth(u)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Everything\",\"amountPaise\":3000000}"))
+            .andExpect(status().isUnprocessableEntity())
+            .andExpect(jsonPath("$.code").value("NOT_POSSIBLE"))
+            .andExpect(jsonPath("$.message").value("This cost leaves nothing to spend. Lower it or your savings."));
     }
 }

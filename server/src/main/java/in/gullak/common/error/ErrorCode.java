@@ -18,6 +18,7 @@ public enum ErrorCode {
     TOO_LARGE(false),
     NOT_POSSIBLE(false),
     SETUP_INCOMPLETE(false),
+    FIRST_CYCLE_OVER(false),
     INTERNAL(false);
 
     private final boolean warn;

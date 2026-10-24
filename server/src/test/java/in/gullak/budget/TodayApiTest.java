@@ -92,8 +92,8 @@ class TodayApiTest extends ApiTest {
 
     @Test
     void firstCallCreatesTheCycle() throws Exception { // API-TDY-08
-        TestUser u = exampleUser();
-        today(u).andExpect(status().isOk());
+        TestUser u = newlySetUpUser();
+        today(u).andExpect(status().isOk()).andExpect(jsonPath("$.budgetPaise").value(48_300));
         assertThat(cycleCount(u)).isEqualTo(1);
         today(u);
         assertThat(cycleCount(u)).isEqualTo(1);
@@ -164,7 +164,7 @@ class TodayApiTest extends ApiTest {
 
     @Test
     void concurrentFirstRequestsCreateOneCycle() throws Exception { // Review focus, I-1
-        TestUser u = exampleUser();
+        TestUser u = newlySetUpUser();
         ExecutorService pool = Executors.newFixedThreadPool(4);
         try {
             CountDownLatch start = new CountDownLatch(1);
@@ -197,7 +197,7 @@ class TodayApiTest extends ApiTest {
         today(u).andExpect(status().isOk()).andExpect(jsonPath("$.cycleStart").value("2026-10-01"));
         // A racing request that read a different payday would insert 15 Oct - 14 Nov.
         Integer inserted = new TransactionTemplate(txManager).execute(tx -> cycleRepository.insertIfAbsent(
-            UUID.randomUUID(), u.id(), LocalDate.of(2026, 10, 15), LocalDate.of(2026, 11, 14)));
+            UUID.randomUUID(), u.id(), LocalDate.of(2026, 10, 15), LocalDate.of(2026, 11, 14), null));
         assertThat(inserted).isZero();
         assertThat(cycleCount(u)).isEqualTo(1);
         today(u).andExpect(status().isOk())
@@ -208,12 +208,12 @@ class TodayApiTest extends ApiTest {
     @Test
     void databaseRejectsOverlappingCyclesForOneUserOnly() throws Exception { // I-1
         TestUser u = exampleUser();
-        TestUser other = exampleUser();
+        TestUser other = newlySetUpUser(); // no seeded cycle, so its 15 Oct start is free
         today(u).andExpect(status().isOk());
-        assertThatThrownBy(() -> insertCycle(u, "2026-10-31", "2026-11-30"))
+        assertThatThrownBy(() -> seedCycle(u, "2026-10-31", "2026-11-30"))
             .isInstanceOf(DataIntegrityViolationException.class);
-        insertCycle(u, "2026-11-01", "2026-11-30"); // adjacent, not overlapping
-        insertCycle(other, "2026-10-15", "2026-11-14"); // another user's dates are independent
+        seedCycle(u, "2026-11-01", "2026-11-30"); // adjacent, not overlapping
+        seedCycle(other, "2026-10-15", "2026-11-14"); // another user's dates are independent
         today(u).andExpect(status().isOk());
     }
 
@@ -224,19 +224,13 @@ class TodayApiTest extends ApiTest {
         new TransactionTemplate(txManager).executeWithoutResult(tx -> {
             // Postgres DDL is transactional: the constraint is back once this rolls back.
             jdbc.sql("alter table cycles drop constraint cycles_no_overlap").update();
-            insertCycle(u, "2026-10-15", "2026-11-14");
+            seedCycle(u, "2026-10-15", "2026-11-14");
             assertThat(cycleRepository.findCovering(u.id(), LocalDate.of(2026, 10, 23)))
                 .map(CycleEntity::toCycle)
                 .contains(new Cycle(LocalDate.of(2026, 10, 15), LocalDate.of(2026, 11, 14)));
             tx.setRollbackOnly();
         });
         assertThat(cycleCount(u)).isEqualTo(1);
-    }
-
-    private void insertCycle(TestUser u, String start, String end) {
-        jdbc.sql("insert into cycles (id, user_id, start_date, end_date) values (?, ?, ?, ?)")
-            .params(UUID.randomUUID(), u.id(), LocalDate.parse(start), LocalDate.parse(end))
-            .update();
     }
 
     @Test

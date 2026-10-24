@@ -34,12 +34,34 @@ public class BudgetService {
     public TodayResponse today(UUID userId) {
         Profile profile = profiles.get(userId);
         LocalDate today = Ist.today(clock);
-        Cycle cycle = cycles.current(userId, today, profile);
+        long fixed = fixedCosts.totalFor(userId);
+        CurrentCycle current = cycles.current(userId, today, profile, spendable(profile, fixed));
+        return compute(userId, profile, today, fixed, current);
+    }
+
+    @Transactional
+    public TodayResponse setFirstCyclePool(UUID userId, long moneyLeftPaise) {
+        Profile profile = profiles.get(userId);
+        LocalDate today = Ist.today(clock);
+        long fixed = fixedCosts.totalFor(userId);
+        CurrentCycle current = cycles.current(userId, today, profile, spendable(profile, fixed));
+        cycles.setFirstCyclePool(userId, current, moneyLeftPaise);
+        return compute(userId, profile, today, fixed, cycles.current(userId, today, profile, spendable(profile, fixed)));
+    }
+
+    private static long spendable(Profile profile, long fixed) {
+        return profile.incomePaise() - fixed - profile.savingsPaise();
+    }
+
+    private TodayResponse compute(UUID userId, Profile profile, LocalDate today, long fixed, CurrentCycle current) {
+        Cycle cycle = current.cycle();
         long before = totals.spent(userId, Ist.startOf(cycle.start()), Ist.startOf(today));
         long spentToday = totals.spent(userId, Ist.startOf(today), Ist.startOf(today.plusDays(1)));
         int daysLeft = (int) ChronoUnit.DAYS.between(today, cycle.end()) + 1;
-        DailyBudget b = BudgetCalculator.compute(new BudgetInput(
-            profile.incomePaise(), fixedCosts.totalFor(userId), profile.savingsPaise(), before, spentToday, daysLeft));
+        BudgetInput input = current.poolOverridePaise() != null
+            ? BudgetInput.ofSpendable(current.poolOverridePaise(), before, spentToday, daysLeft)
+            : new BudgetInput(profile.incomePaise(), fixed, profile.savingsPaise(), before, spentToday, daysLeft);
+        DailyBudget b = BudgetCalculator.compute(input);
         return new TodayResponse(today, b.budgetPaise(), b.spentTodayPaise(), b.leftPaise(), b.overPaise(),
             b.poolOverPaise(), b.mood(), GullakLines.line(profile.personality(), b.mood(), b.leftPaise(), b.totalOverPaise()), daysLeft,
             cycle.start(), cycle.end());

@@ -23,7 +23,14 @@ class CycleEntity {
     @Column(name = "end_date", nullable = false)
     private LocalDate endDate;
 
+    @Column(name = "pool_override_paise")
+    private Long poolOverridePaise;
+
     protected CycleEntity() {}
+
+    UUID getId() { return id; }
+    LocalDate getStartDate() { return startDate; }
+    Long getPoolOverridePaise() { return poolOverridePaise; }
 
     Cycle toCycle() { return new Cycle(startDate, endDate); }
 }

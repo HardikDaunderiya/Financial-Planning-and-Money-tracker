@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createTokenOwner, type SessionControl } from "@/lib/api";
 import { api, authEvents } from "@/lib/client";
@@ -91,12 +92,23 @@ export function SessionProvider({
         // The keychain outlives an iOS reinstall but AsyncStorage does not: a session without the first-run
         // marker belongs to a previous install, so it is dropped (M7).
         let t = stored;
-        if ((await kv.get(kvKeys.installed)) === null) {
+        // Read AsyncStorage directly: a failed read means "unknown" and must not look like "missing".
+        let missing = false;
+        try {
+          missing = (await AsyncStorage.getItem(`gullak.${kvKeys.installed}`)) == null;
+        } catch (e) {
+          log.warn("session.marker_read_failed", { reason: e instanceof Error ? e.name : "unknown" });
+        }
+        if (missing) {
           if (t) {
             t = null;
             await control.signOut(hydrateWith.current.logout).catch(() => undefined);
           }
-          await kv.set(kvKeys.installed, "1");
+          try {
+            await AsyncStorage.setItem(`gullak.${kvKeys.installed}`, "1");
+          } catch (e) {
+            log.warn("session.marker_write_failed", { reason: e instanceof Error ? e.name : "unknown" });
+          }
         }
         const saved = t ? await kv.get(kvKeys.email) : null;
         if (!alive) return;

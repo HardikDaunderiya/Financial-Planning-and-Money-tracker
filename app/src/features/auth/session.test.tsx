@@ -347,6 +347,49 @@ describe("session", () => {
     );
   });
 
+  describe("first-run marker under storage failures (M7)", () => {
+    const getItem = () => jest.mocked(AsyncStorage.getItem);
+    const setItem = () => jest.mocked(AsyncStorage.setItem);
+    const mount = (s: ReturnType<typeof store>, logout: () => Promise<void>) =>
+      render(
+        <SessionProvider store={s} logout={logout}>
+          <Probe />
+        </SessionProvider>,
+      );
+
+    it("a failing marker read keeps the session and revokes nothing", async () => {
+      const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+      getItem().mockRejectedValueOnce(new Error("disk"));
+      setItem().mockClear();
+      const logout = jest.fn(() => Promise.resolve());
+      const s = store({ accessToken: "A", refreshToken: "R" });
+      await mount(s, logout);
+      await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("signedIn"));
+      expect(logout).not.toHaveBeenCalled();
+      expect(s.tokens).not.toBeNull();
+      expect(setItem()).not.toHaveBeenCalledWith("gullak.installed", "1");
+      warn.mockRestore();
+    });
+
+    it("a missing marker that cannot be written signs out once, and later launches revoke nothing when no session is stored", async () => {
+      const warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+      getItem().mockResolvedValueOnce(null);
+      setItem().mockRejectedValueOnce(new Error("full"));
+      const logout = jest.fn(() => Promise.resolve());
+      const s = store({ accessToken: "A", refreshToken: "R" });
+      const first = await mount(s, logout);
+      await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("signedOut"));
+      expect(logout).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(warn.mock.calls)).toContain("session.marker_write_failed");
+      await first.unmount();
+      getItem().mockResolvedValueOnce(null);
+      await mount(s, logout);
+      await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("signedOut"));
+      expect(logout).toHaveBeenCalledTimes(1);
+      warn.mockRestore();
+    });
+  });
+
   describe("first-run marker (M7)", () => {
     it("a stored session on an install that never ran (iOS reinstall keeps the keychain) starts signed out and clears the tokens", async () => {
       await AsyncStorage.removeItem("gullak.installed");

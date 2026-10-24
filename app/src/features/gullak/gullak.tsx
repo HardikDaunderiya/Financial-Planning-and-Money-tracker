@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import Animated, {
   Easing,
   cancelAnimation,
@@ -14,7 +14,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { Circle, G, Path } from "react-native-svg";
 import { motion } from "@/theme";
-import { closedEyes, faces, gold, stagePaint, sweatBlue } from "./drawing";
+import { closedEyes, coinEdge, faces, gold, stagePaint, sweatBlue } from "./drawing";
 import { Confetti, GullakStill, GullakSvg, SWEAT_PATH, eyeStroke, type GullakLayers } from "./gullak-still";
 import { moodLabels, type Mood } from "./moods";
 import type { Stage } from "./stage";
@@ -63,6 +63,7 @@ function AnimatedGullak({
   const blink = useSharedValue(0); // 0 open, 1 closed
   const sweat = useSharedValue(mood === "nervous" ? 1 : 0);
   const confetti = useSharedValue(mood === "celebrating" ? 1 : 0);
+  const eventY = useSharedValue(0); // coin nudge and celebrate jump, added to the idle bounce
   const coinY = useSharedValue(-24);
   const coinOpacity = useSharedValue(0);
 
@@ -113,24 +114,35 @@ function AnimatedGullak({
       sweat.set(withTiming(0, { duration: motion.fast }));
     }
     confetti.set(withTiming(mood === "celebrating" ? 1 : 0, { duration: motion.base }));
+    return () => cancelAnimation(sweat);
   }, [mood, sweat, confetti]);
 
+  useEffect(
+    () => () => {
+      for (const value of [bounce, tilt, blink, sweat, confetti, eventY, coinY, coinOpacity])
+        cancelAnimation(value);
+    },
+    [bounce, tilt, blink, sweat, confetti, eventY, coinY, coinOpacity],
+  );
+
+  const lastKey = useRef(event?.key);
   useEffect(() => {
-    if (!event) return;
+    if (!event || event.key === lastKey.current) return;
+    lastKey.current = event.key;
     if (event.kind === "coin") {
-      coinY.set(-24);
       coinOpacity.set(
         withSequence(withTiming(1, { duration: 50 }), withDelay(450, withTiming(0, { duration: 100 }))),
       );
+      coinY.set(-24);
       coinY.set(withTiming(26, { duration: 600, easing: EASE_OUT }));
-      bounce.set(
+      eventY.set(
         withSequence(
           withTiming(2, { duration: 120, easing: EASE_OUT }),
           withTiming(0, { duration: 200, easing: EASE_OUT }),
         ),
       );
     } else {
-      bounce.set(
+      eventY.set(
         withSequence(
           withSpring(-18, { duration: 300, dampingRatio: 0.6 }),
           withSpring(0, { duration: 400, dampingRatio: 0.8 }),
@@ -147,7 +159,7 @@ function AnimatedGullak({
   }, [event?.key]);
 
   const wrapper = useAnimatedStyle(() => ({
-    transform: [{ translateY: bounce.get() }, { rotate: `${tilt.get()}deg` }],
+    transform: [{ translateY: bounce.get() + eventY.get() }, { rotate: `${tilt.get()}deg` }],
   }));
   const eyesOpenProps = useAnimatedProps(() => ({ opacity: 1 - blink.get() }));
   const eyesClosedProps = useAnimatedProps(() => ({ opacity: blink.get() }));
@@ -180,7 +192,7 @@ function AnimatedGullak({
           cx="60"
           r="6"
           fill={gold}
-          stroke="#B8860B"
+          stroke={coinEdge}
           strokeWidth={1.5}
           animatedProps={coinProps}
         />
@@ -194,16 +206,7 @@ function AnimatedGullak({
       accessibilityLabel={moodLabels[mood]}
       style={[{ width: size, height: size }, wrapper]}
     >
-      <GullakSvg
-        size={size}
-        paint={stagePaint[stage]}
-        face={face}
-        eyesClosed={false}
-        sweat={mood === "nervous" ? 1 : 0}
-        confetti={mood === "celebrating" ? 1 : 0}
-        stars={mood === "fainted" ? 1 : 0}
-        layers={layers}
-      />
+      <GullakSvg size={size} paint={stagePaint[stage]} face={face} mood={mood} layers={layers} />
     </Animated.View>
   );
 }

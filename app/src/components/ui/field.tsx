@@ -5,8 +5,8 @@ import { Text } from "./text";
 
 export type FieldProps = Omit<TextInputProps, "style"> & {
   label: string;
-  hint?: string;
-  error?: string;
+  hint?: string | undefined;
+  error?: string | undefined;
   /** A fixed prefix such as ₹, drawn inside the box. */
   prefix?: string;
   large?: boolean;

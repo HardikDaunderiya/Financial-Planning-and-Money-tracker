@@ -19,6 +19,8 @@ export type ButtonProps = {
   /** Icon-only buttons pass `icon` and keep `title` as the accessibility label. */
   icon?: React.ReactNode;
   iconOnly?: boolean;
+  /** Overrides the variant text colour, for a button on a dark surface. */
+  textColor?: string;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 };
@@ -31,6 +33,7 @@ export function Button({
   loading,
   icon,
   iconOnly,
+  textColor,
   style,
   testID,
 }: ButtonProps) {
@@ -72,7 +75,7 @@ export function Button({
         <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm }}>
           {icon ?? null}
           {iconOnly ? null : (
-            <Text variant="bodyStrong" color={v.text}>
+            <Text variant="bodyStrong" color={textColor ?? v.text}>
               {title}
             </Text>
           )}

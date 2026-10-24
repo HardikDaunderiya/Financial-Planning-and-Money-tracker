@@ -17,6 +17,19 @@ import { installGlobalHandlers } from "@/lib/unhandled";
 import { colors } from "@/theme";
 
 void SplashScreen.preventAutoHideAsync();
+if (process.env.EXPO_OS !== "web") {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- phone-only module, kept out of the web bundle
+  const Notifications = require("expo-notifications") as typeof import("expo-notifications");
+  Notifications.setNotificationHandler({
+    handleNotification: () =>
+      Promise.resolve({
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+      }),
+  });
+}
 installGlobalHandlers();
 wireOnlineManager();
 

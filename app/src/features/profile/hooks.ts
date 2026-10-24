@@ -1,6 +1,9 @@
+import { useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { budgetApi } from "@/features/budget/api";
 import { isApiError } from "@/lib/api-errors";
 import { fixedCostApi, profileApi, type FixedCost, type Profile, type ProfileRequest } from "./api";
+import type { FinishSetupInput } from "./screens/personality-screen";
 
 export const profileKeys = { profile: ["profile"] as const, fixedCosts: ["fixed-costs"] as const };
 
@@ -84,4 +87,22 @@ export function usePutProfile() {
       void qc.invalidateQueries({ queryKey: ["today"] });
     },
   });
+}
+
+/** PUT the profile, then pin the first cycle's pool when the user changed the money-left figure. */
+export function useFinishSetup() {
+  const qc = useQueryClient();
+  return useCallback(
+    async ({ moneyLeftPaise, ...profile }: FinishSetupInput) => {
+      const saved = await profileApi.put(profile);
+      qc.setQueryData(profileKeys.profile, saved);
+      if (moneyLeftPaise !== null) {
+        const today = await budgetApi.setFirstCycle(moneyLeftPaise);
+        qc.setQueryData(["today"], today);
+      } else {
+        await qc.invalidateQueries({ queryKey: ["today"] });
+      }
+    },
+    [qc],
+  );
 }

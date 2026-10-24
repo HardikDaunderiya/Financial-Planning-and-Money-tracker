@@ -22,4 +22,16 @@ jest.mock("@react-native-community/netinfo", () =>
 );
 jest.mock("expo-crypto", () => ({ randomUUID: () => "00000000-0000-4000-8000-000000000000" }));
 
+// expo-notifications is phone-only and registers native listeners on import; app code reaches it through
+// lib/notifications (faked in its own tests) and the root layout's handler.
+jest.mock("expo-notifications", () => ({
+  setNotificationHandler: jest.fn(),
+  getPermissionsAsync: jest.fn(() => Promise.resolve({ granted: false })),
+  requestPermissionsAsync: jest.fn(() => Promise.resolve({ granted: false })),
+  getAllScheduledNotificationsAsync: jest.fn(() => Promise.resolve([])),
+  cancelScheduledNotificationAsync: jest.fn(() => Promise.resolve()),
+  scheduleNotificationAsync: jest.fn(() => Promise.resolve("id")),
+  SchedulableTriggerInputTypes: { DAILY: "daily" },
+}));
+
 process.env.EXPO_PUBLIC_API_URL = "http://test.local/api/v1";

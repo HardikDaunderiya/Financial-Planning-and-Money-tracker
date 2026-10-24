@@ -2,6 +2,7 @@ package in.gullak.common.config;
 
 import in.gullak.common.error.JsonAuthHandlers;
 import in.gullak.common.log.UserMdcFilter;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -28,7 +29,15 @@ public class SecurityConfig {
         PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/**");
 
     @Bean
-    SecurityFilterChain api(HttpSecurity http, JsonAuthHandlers handlers) throws Exception {
+    SecurityFilterChain api(HttpSecurity http, JsonAuthHandlers handlers,
+                            ObjectProvider<DevCorsConfig.DevCors> devCors) throws Exception {
+        // CORS only under the `local` profile (DevCorsConfig); otherwise browsers get no CORS headers.
+        DevCorsConfig.DevCors cors = devCors.getIfAvailable();
+        if (cors != null) {
+            http.cors(c -> c.configurationSource(cors.source()));
+        } else {
+            http.cors(c -> c.disable());
+        }
         http.csrf(c -> c.disable())
             .httpBasic(b -> b.disable())
             .formLogin(f -> f.disable())

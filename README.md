@@ -16,13 +16,16 @@ Run locally (export `GULLAK_DB_PASSWORD` first: both the database container and 
 ```bash
 export GULLAK_DB_PASSWORD=$(openssl rand -base64 24)
 docker run -d --name gullak-db -e POSTGRES_DB=gullak -e POSTGRES_USER=gullak \
-  -e POSTGRES_PASSWORD=$GULLAK_DB_PASSWORD -p 5432:5432 postgres:17
+  -e POSTGRES_PASSWORD=$GULLAK_DB_PASSWORD -p 5434:5432 postgres:17
 export GULLAK_JWT_SECRET=$(openssl rand -base64 48)
 export GULLAK_OTP_PEPPER=$(openssl rand -base64 48)
-./gradlew bootRun --args='--spring.profiles.active=local'
+export SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5434/gullak
+./gradlew bootRun --args='--spring.profiles.active=local --server.port=8081'
 ```
 
-Sign-in codes: `curl -X POST localhost:8080/api/v1/auth/dev/otp -H 'content-type: application/json' -d '{"email":"you@example.com"}'`.
+Ports: the database runs on 5434 and the server on 8081 so they don't clash with another Postgres on 5432 or another app on 8080. If one is taken, pick a free port (`lsof -nP -iTCP:<port> -sTCP:LISTEN` shows who has it) and change `-p <port>:5432` with `SPRING_DATASOURCE_URL`, or `--server.port`.
+
+Sign-in codes: `curl -X POST localhost:8081/api/v1/auth/dev/otp -H 'content-type: application/json' -d '{"email":"you@example.com"}'`.
 
 Under `local` this route is public and returns the code for any email, so never expose a local server on a shared network.
 
@@ -35,7 +38,7 @@ Every environment variable the server reads:
 | Variable | Used by | Required | Notes |
 |---|---|---|---|
 | `SPRING_PROFILES_ACTIVE` | all | yes | `prod` in production; on a laptop pass `--spring.profiles.active=local` as below. With no profile there is no mailer and no datasource, so startup fails. |
-| `GULLAK_DB_PASSWORD` | `local` profile | local | Password for the `gullak` user on `localhost:5432/gullak`. |
+| `GULLAK_DB_PASSWORD` | `local` profile | local | Password for the `gullak` user on the local database (port 5434 in the steps above). |
 | `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD` | `prod` profile | prod | The production Postgres 17 database. Only `local` sets a datasource in YAML. |
 | `GULLAK_JWT_SECRET` | all | yes | Signs access tokens (HS256). At least 32 characters, or startup fails. |
 | `GULLAK_OTP_PEPPER` | all | yes | HMAC key for stored OTP codes. At least 32 characters, or startup fails. Changing it invalidates codes in flight. |
@@ -66,9 +69,10 @@ Expo SDK 58 (Expo Router, TypeScript strict). Requirements: Node 22, and for pho
 
 ```bash
 cd app
-cp .env.example .env        # point EXPO_PUBLIC_API_URL at the server
+cp .env.example .env        # EXPO_PUBLIC_API_URL=http://<laptop Wi-Fi IP>:8081/api/v1 (phone) or http://localhost:8081/api/v1 (web only)
 npm install
-npm run start               # press a for Android, i for iOS, w for web
+npx expo start --port 8082  # press a for Android, i for iOS, w for web (8081 is the server)
+                            # the web build may call the local server only under the `local` profile (DevCorsConfig)
 npm test                    # Jest + React Native Testing Library
 npm run lint && npm run typecheck
 ```

@@ -26,14 +26,24 @@ const FORBIDDEN_VALUES = [
   /[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{1,64}/, // email
   /eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*/, // JWT
   /eyJ[A-Za-z0-9_-]{10,}/, // a bare JWT segment
-  /[A-Za-z0-9_+/=-]{24,}/, // an opaque token or id-like run
   /(₹|\b(rs|inr)\.?)\s*\d/i, // a money amount
 ];
 
+/** Keys whose values are built by our own code (routes, uuids, error class names), never from a token. */
+const OPAQUE_EXEMPT = new Set(["route", "id", "kind"]);
+const OPAQUE_RUN = /[A-Za-z0-9+/=_-]{32,}/g;
+
+/** A base64-style run: 32 or more token characters with a letter and at least two digits. */
+function hasOpaqueRun(value: string): boolean {
+  const runs = value.match(OPAQUE_RUN) ?? [];
+  return runs.some((r) => /[A-Za-z]/.test(r) && (r.match(/\d/g) ?? []).length >= 2);
+}
+
 /** True when a string could carry an email, a token, a code or an amount. Over-long strings are dropped before any regex runs. */
-function isSensitive(value: string): boolean {
+function isSensitive(value: string, key: string): boolean {
   if (value.length > MAX_STRING) return true;
   if (FORBIDDEN_VALUES.some((re) => re.test(value))) return true;
+  if (!OPAQUE_EXEMPT.has(key) && hasOpaqueRun(value)) return true;
   return /\d{6}/.test(value.replace(/[\s-]/g, "")); // OTP code, even spaced or dashed
 }
 
@@ -54,7 +64,7 @@ export function redact(data: Record<string, unknown> | undefined): Record<string
         } else if (typeof value === "string") {
           if (key === "errorCode") {
             out[key] = ERROR_CODE.test(value) ? value : "invalid";
-          } else if (!isSensitive(value)) {
+          } else if (!isSensitive(value, key)) {
             out[key] = value;
           }
         }

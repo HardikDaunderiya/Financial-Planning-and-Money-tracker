@@ -169,3 +169,23 @@ describe("redaction (LOG-09)", () => {
     expect(s.events[0]?.data).toEqual({ id: "abc" });
   });
 });
+
+describe("opaque-run rule", () => {
+  it.each([
+    [{ route: "/me/profile/fixed-costs/{id}" }],
+    [{ route: "/settings/notifications/edit" }],
+    [{ id: "3f2b6c1e-8a4d-4f1b-9c2e-7d5a1b3c4e6f" }],
+    [{ kind: "NetworkRequestFailedError" }],
+    [{ reason: "TOKEN_REFRESH_FAILED_UNAUTHENTICATED" }],
+  ])("keeps %j", (data) => {
+    expect(redact(data)).toEqual(data);
+  });
+
+  it("drops an opaque 40-character mixed token under message", () => {
+    expect(redact({ message: "aB3dE5fG7hI9jK1lM3nO5pQ7rS9tU1vW3xY5zA7b" })).toEqual({});
+  });
+
+  it("still drops emails and amounts under route, id and kind", () => {
+    expect(redact({ route: "/u/priya@example.com", kind: "₹500", id: "a@b.co" })).toEqual({});
+  });
+});

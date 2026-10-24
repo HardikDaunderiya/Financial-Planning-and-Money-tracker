@@ -498,7 +498,7 @@ One anonymised sample per bank lives in `server/src/test/resources/statements/`.
 
 | ID | Flow | Checks |
 |---|---|---|
-| E2E-01 | Setup | email OTP, income, payday, fixed costs, savings, personality, notification step, first-run Home shows ₹500 |
+| E2E-01 | Setup | email OTP, income, payday, fixed costs, savings, personality, notification step, first-run Home shows "Day one", the Gullak's hello and the pro-rated day-one budget (BUD-32) |
 | E2E-02 | Quick-add | + → ₹250 Eating out UPI → Home shows ₹250 spent and the Gullak reacts |
 | E2E-03 | Edit and delete | open the spend, change to ₹180, save; delete it; Home back to ₹0 |
 | E2E-04 | Statement | Insights → add statement → HDFC sample with password → preview → sort 14 → "All sorted" → Insights totals updated |

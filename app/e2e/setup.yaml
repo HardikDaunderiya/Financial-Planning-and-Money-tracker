@@ -1,0 +1,32 @@
+appId: in.gullak.app
+---
+- launchApp:
+    clearState: true
+- runScript: scripts/email.js
+- tapOn: "Email"
+- inputText: ${output.email}
+- tapOn: "Send code"
+- assertVisible: "Enter the code"
+- runScript: scripts/otp.js
+- inputText: ${output.code}
+- assertVisible: "Your salary"
+- tapOn: "Take-home pay per month"
+- inputText: "50000"
+- tapOn: "1st of the month"
+- tapOn: "Continue"
+- assertVisible: "Fixed costs"
+- tapOn: "Add Rent, ₹10,000"
+- tapOn: "Add Cook, ₹2,000"
+- assertVisible: "₹12,000"
+- tapOn: "Continue"
+- assertVisible: "Monthly savings"
+- assertVisible: "Doable"
+- tapOn: "Continue"
+- assertVisible: "Gullak's personality"
+- tapOn:
+    text: "Start with .* today"
+- tapOn: "Not now"
+- assertVisible: "Day one"
+- assertVisible: "Hi, I'm your Gullak. Log a spend and I'll keep count."
+- assertVisible:
+    text: "left of ₹.* today"

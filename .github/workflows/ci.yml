@@ -35,3 +35,4 @@ jobs:
       - run: npm run format
       - run: npm run gen:errors -- --check
       - run: npm test -- --ci
+      - run: npx expo export --platform web

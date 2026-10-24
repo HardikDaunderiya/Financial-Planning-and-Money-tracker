@@ -74,3 +74,7 @@ npm run lint && npm run typecheck
 ```
 
 The server must be running with the `local` profile (above). Sign-in codes in local development come from `POST /api/v1/auth/dev/otp` (Plan 2, Task 5), which only exists under that profile.
+
+E2E: see `app/e2e/README.md`.
+
+After Plan 2 the app lets you sign in with an email code, set up your income, payday, fixed costs, savings, personality and message times, and see Home with the Gullak and today's budget (day-one copy on a first run, "Updated 2 hours ago" offline). Me shows your details and signs you out. The centre + button and Home's "Add first spend" are disabled until Plan 3 adds quick-add.

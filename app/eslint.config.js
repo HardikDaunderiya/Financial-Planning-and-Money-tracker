@@ -50,6 +50,6 @@ module.exports = defineConfig([
     },
   },
   {
-    ignores: ["node_modules/", ".expo/", "dist/", "scripts/**/*.mjs"],
+    ignores: ["node_modules/", ".expo/", "dist/", "scripts/**/*.mjs", "e2e/scripts/*.js"],
   },
 ]);

@@ -5,6 +5,7 @@ import { SessionProvider, useSession } from "./session";
 import type { TokenStore, Tokens } from "@/lib/storage";
 import { NetworkError } from "@/lib/api-errors";
 import { authEvents } from "@/lib/client";
+import { kv } from "@/lib/kv";
 import { queryClient } from "@/lib/query";
 
 function store(initial: Tokens | null): TokenStore & { tokens: Tokens | null } {
@@ -89,5 +90,25 @@ describe("session", () => {
     await act(() => Promise.resolve(authEvents.emitSignedOut()));
     expect(screen.getByTestId("status")).toHaveTextContent("signedOut");
     expect(queryClient.getQueryData(["budget"])).toBeUndefined();
+  });
+
+  it("sign-out and a forced sign-out both clear the setup draft", async () => {
+    const remove = jest.spyOn(kv, "remove").mockResolvedValue(undefined);
+    let session: ReturnType<typeof useSession> | undefined;
+    await render(
+      <SessionProvider
+        store={store({ accessToken: "A", refreshToken: "R" })}
+        logout={() => Promise.resolve()}
+      >
+        <Probe onReady={(x) => (session = x)} />
+      </SessionProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("signedIn"));
+    await act(() => session?.signOut() ?? Promise.resolve());
+    expect(remove).toHaveBeenCalledWith("setup-draft");
+    remove.mockClear();
+    await act(() => Promise.resolve(authEvents.emitSignedOut()));
+    expect(remove).toHaveBeenCalledWith("setup-draft");
+    remove.mockRestore();
   });
 });

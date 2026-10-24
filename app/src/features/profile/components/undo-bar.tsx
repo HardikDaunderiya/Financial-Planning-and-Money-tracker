@@ -1,8 +1,8 @@
 import React, { useEffect, useRef } from "react";
-import { View } from "react-native";
+import { AccessibilityInfo, Platform, View } from "react-native";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
-import { colors, motion, radius, spacing } from "@/theme";
+import { colors, motion, radius, rowHeight, spacing } from "@/theme";
 
 /** An inline "X removed · Undo" row that commits after 5 seconds. Not a toast: it carries an action, so it sits in the content. */
 export function UndoBar({
@@ -20,6 +20,11 @@ export function UndoBar({
     expire.current = onExpire;
   });
   useEffect(() => {
+    if (Platform.OS === "ios") AccessibilityInfo.announceForAccessibility(message);
+    // Announce once per bar; the bar is keyed by what it removes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
     const t = setTimeout(() => expire.current(), motion.undoWindow);
     return () => clearTimeout(t);
   }, []);
@@ -34,7 +39,7 @@ export function UndoBar({
         borderRadius: radius.md,
         paddingLeft: spacing.md,
         paddingRight: spacing.xs,
-        minHeight: 52,
+        minHeight: rowHeight,
       }}
     >
       <Text variant="label" color={colors.darkText}>

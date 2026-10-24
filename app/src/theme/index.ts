@@ -1,6 +1,6 @@
 export { colors } from "./colors";
 export type { ColorName } from "./colors";
-export { spacing, touchTarget } from "./spacing";
+export { spacing, touchTarget, rowHeight } from "./spacing";
 export { type, fonts } from "./typography";
 export type { TypeVariant } from "./typography";
 export { radius } from "./radius";

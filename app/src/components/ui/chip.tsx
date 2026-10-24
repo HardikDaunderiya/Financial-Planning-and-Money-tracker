@@ -6,18 +6,20 @@ import { Text } from "./text";
 export type ChipProps = {
   label: string;
   selected?: boolean;
+  disabled?: boolean;
   onPress: () => void;
   icon?: React.ReactNode;
   testID?: string;
 };
 
 /** A selectable pill. Selected: 2px ink border (design.md). */
-export function Chip({ label, selected = false, onPress, icon, testID }: ChipProps) {
+export function Chip({ label, selected = false, disabled = false, onPress, icon, testID }: ChipProps) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ selected }}
+      accessibilityState={{ selected, disabled }}
+      disabled={disabled}
       onPress={onPress}
       testID={testID}
       style={({ pressed }) => ({
@@ -30,7 +32,7 @@ export function Chip({ label, selected = false, onPress, icon, testID }: ChipPro
         flexDirection: "row",
         alignItems: "center",
         gap: spacing.sm,
-        opacity: pressed ? 0.85 : 1,
+        opacity: disabled ? 0.45 : pressed ? 0.85 : 1,
       })}
     >
       {icon ?? null}

@@ -59,7 +59,7 @@ export function FixedCostRow({
       </Pressable>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Remove ${cost.name}`}
+        accessibilityLabel={`Remove ${cost.name.toLowerCase()}`}
         onPress={onRemove}
         hitSlop={6}
         style={{ width: touchTarget, height: touchTarget, alignItems: "center", justifyContent: "center" }}
@@ -106,7 +106,11 @@ export function FixedCostForm({
         label="Amount per month"
         prefix="₹"
         value={amount}
-        onChangeText={(t) => setAmount(t.replace(/[^\d,]/g, ""))}
+        onChangeText={(t) => {
+          const p = parseRupeesToPaise(t);
+          setAmount(p ? String(p / 100) : "");
+        }}
+        maxLength={10}
         keyboardType="number-pad"
         inputMode="numeric"
         error={error}

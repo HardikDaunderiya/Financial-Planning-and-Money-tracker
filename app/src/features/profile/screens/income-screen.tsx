@@ -10,9 +10,12 @@ import { spacing } from "@/theme";
 import { PaydayPicker } from "../components/payday-picker";
 import { paydayIsComplete, useSetup } from "../setup-store";
 
+/** 5000000 paise → "50,000" (Indian grouping, no symbol). */
+const grouped = (paise: number) => formatRupees(paise).slice(1);
+
 export function IncomeScreen({ today, onContinue }: { today: string; onContinue: () => void }) {
   const { draft, set } = useSetup();
-  const [typed, setTyped] = useState(draft.incomePaise ? String(draft.incomePaise / 100) : "");
+  const [typed, setTyped] = useState(draft.incomePaise ? grouped(draft.incomePaise) : "");
   const canContinue = draft.incomePaise > 0 && paydayIsComplete(draft.payday);
   return (
     <Screen
@@ -29,7 +32,7 @@ export function IncomeScreen({ today, onContinue }: { today: string; onContinue:
         value={typed}
         onChangeText={(t) => {
           const paise = parseRupeesToPaise(t);
-          setTyped(paise ? String(paise / 100) : "");
+          setTyped(paise ? grouped(paise) : "");
           set({ incomePaise: paise });
         }}
         keyboardType="number-pad"

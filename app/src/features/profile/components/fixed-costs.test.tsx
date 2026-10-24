@@ -81,13 +81,13 @@ describe("Setup 2: fixed costs (APP-24)", () => {
     jest.useFakeTimers();
     mocked.list.mockResolvedValue([{ id: "fc-9", name: "Rent", amountPaise: 1000000 }]);
     await renderScreen();
-    await fireEvent.press(await screen.findByRole("button", { name: "Remove Rent" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "Remove rent" }));
     expect(screen.queryByText("Rent")).toBeNull();
     expect(screen.getByText("Rent removed")).toBeTruthy();
     expect(mocked.remove).not.toHaveBeenCalled();
     await fireEvent.press(screen.getByRole("button", { name: "Undo" }));
     expect(await screen.findByText("Rent")).toBeTruthy();
-    await fireEvent.press(screen.getByRole("button", { name: "Remove Rent" }));
+    await fireEvent.press(screen.getByRole("button", { name: "Remove rent" }));
     await act(() => {
       jest.advanceTimersByTime(5000);
       return Promise.resolve();
@@ -116,7 +116,7 @@ describe("Setup 2: fixed costs (APP-24)", () => {
     expect(await screen.findByText("Add another")).toBeTruthy();
   });
 
-  it("a rejected add keeps the form and shows why", async () => {
+  it("a rejected preset add shows why", async () => {
     mocked.add.mockRejectedValueOnce(
       new ApiError("NOT_POSSIBLE", 422, "Savings and fixed costs leave nothing to spend. Save ₹0 or less."),
     );

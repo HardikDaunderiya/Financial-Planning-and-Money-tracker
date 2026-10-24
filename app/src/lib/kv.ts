@@ -1,7 +1,13 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { log } from "./log";
 
-/** Per-device flags such as "first spend logged" or "notifications asked". Never secrets, never money. */
+/** Keys that other modules must be able to clear (the session clears setup answers on sign-out). */
+export const kvKeys = { setupDraft: "setup-draft" } as const;
+
+/**
+ * Per-device flags such as "first spend logged" or "notifications asked", and the half-finished setup answers,
+ * which are cleared on sign-out. Never tokens or other secrets.
+ */
 export const kv = {
   async get(key: string): Promise<string | null> {
     try {

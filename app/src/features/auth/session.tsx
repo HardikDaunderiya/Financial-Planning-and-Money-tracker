@@ -1,6 +1,7 @@
 import React, { createContext, use, useCallback, useEffect, useMemo, useState } from "react";
 import { createTokenOwner, type SessionControl } from "@/lib/api";
 import { api, authEvents } from "@/lib/client";
+import { kv, kvKeys } from "@/lib/kv";
 import { log } from "@/lib/log";
 import { queryClient } from "@/lib/query";
 import type { TokenStore, Tokens } from "@/lib/storage";
@@ -50,6 +51,7 @@ export function SessionProvider({ children, store, control: given, logout = auth
     () =>
       authEvents.onSignedOut(() => {
         queryClient.clear();
+        void kv.remove(kvKeys.setupDraft);
         setStatus("signedOut");
       }),
     [],
@@ -67,6 +69,7 @@ export function SessionProvider({ children, store, control: given, logout = auth
   const signOut = useCallback(async () => {
     await control.signOut(logout, () => {
       queryClient.clear();
+      void kv.remove(kvKeys.setupDraft);
       setStatus("signedOut");
     });
     log.info("auth.signed_out");

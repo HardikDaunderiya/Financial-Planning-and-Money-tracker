@@ -45,10 +45,21 @@ export function usePatchFixedCost() {
   });
 }
 
+/**
+ * Removes a fixed cost. The cache updates live in these options (not in per-call callbacks) so they still run
+ * when the screen has unmounted. A NOT_FOUND counts as removed and refetches the list to catch up.
+ */
 export function useRemoveFixedCost() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => fixedCostApi.remove(id),
+    mutationFn: async (id: string) => {
+      try {
+        await fixedCostApi.remove(id);
+      } catch (e) {
+        if (!isApiError(e, "NOT_FOUND")) throw e;
+        void qc.invalidateQueries({ queryKey: profileKeys.fixedCosts });
+      }
+    },
     onMutate: async (id) => {
       await qc.cancelQueries({ queryKey: profileKeys.fixedCosts });
       const previous = qc.getQueryData<FixedCost[]>(profileKeys.fixedCosts) ?? [];

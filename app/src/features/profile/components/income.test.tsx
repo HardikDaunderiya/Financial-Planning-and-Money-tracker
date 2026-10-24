@@ -35,6 +35,12 @@ describe("Setup 1: income and payday (APP-25)", () => {
     expect(screen.getByTestId("draft")).toHaveTextContent(/"incomePaise":5000000/);
   });
 
+  it("groups the digits as they are typed", async () => {
+    await renderIncome();
+    await fireEvent.changeText(screen.getByLabelText("Take-home pay per month"), "50000");
+    expect(screen.getByLabelText("Take-home pay per month")).toHaveDisplayValue("50,000");
+  });
+
   it("each payday option updates the cycle line", async () => {
     await renderIncome();
     await fireEvent.press(screen.getByRole("radio", { name: "1st of the month" }));

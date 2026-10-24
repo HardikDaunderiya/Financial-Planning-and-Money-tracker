@@ -34,9 +34,22 @@ interface CycleRepository extends JpaRepository<CycleEntity, UUID> {
      */
     @Modifying
     @Query(value = """
-            insert into cycles (id, user_id, start_date, end_date) values (:id, :userId, :start, :end)
+            insert into cycles (id, user_id, start_date, end_date, pool_override_paise, budget_from)
+            values (:id, :userId, :start, :end, :pool, :budgetFrom)
             on conflict do nothing
             """, nativeQuery = true)
     int insertIfAbsent(@Param("id") UUID id, @Param("userId") UUID userId,
-                       @Param("start") LocalDate start, @Param("end") LocalDate end);
+                       @Param("start") LocalDate start, @Param("end") LocalDate end, @Param("pool") Long pool,
+                       @Param("budgetFrom") LocalDate budgetFrom);
+
+    @Query("select count(c) from CycleEntity c where c.userId = :userId and c.endDate < :start")
+    long countEndingBefore(@Param("userId") UUID userId, @Param("start") LocalDate start);
+
+    /** Only an open cycle of the caller; returns 0 rows when it is closed or not theirs. */
+    @Modifying(clearAutomatically = true)
+    @Query(value = """
+            update cycles set pool_override_paise = :pool, updated_at = now()
+            where id = :id and user_id = :userId and closed_at is null
+            """, nativeQuery = true)
+    int setPoolOverride(@Param("id") UUID id, @Param("userId") UUID userId, @Param("pool") long pool);
 }

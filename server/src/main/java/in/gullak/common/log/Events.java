@@ -9,6 +9,7 @@ public final class Events {
     public static final String FIXED_COST_CHANGED = "profile.fixed_cost.changed";
     public static final String CYCLE_OPENED = "cycle.opened";
     public static final String CYCLE_CLOSED = "cycle.closed";
+    public static final String CYCLE_POOL_SET = "cycle.pool_set";
     public static final String SPEND_CREATED = "spend.created";
     public static final String SPEND_UPDATED = "spend.updated";
     public static final String SPEND_DELETED = "spend.deleted";

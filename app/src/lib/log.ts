@@ -1,0 +1,119 @@
+/* The only module allowed to call console. Everything else logs through `log`. */
+import { reporting, type ReportingSink } from "./reporting";
+
+type ConsoleLike = Pick<Console, "debug" | "info" | "warn" | "error">;
+
+const ALLOWED_KEYS = new Set([
+  "route",
+  "method",
+  "status",
+  "ms",
+  "count",
+  "attempt",
+  "id",
+  "errorCode",
+  "reason",
+  "key",
+  "granted",
+  "fatal",
+  "kind",
+  "screen",
+  "message",
+]);
+const ERROR_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
+const MAX_STRING = 200;
+const FORBIDDEN_VALUES = [
+  /[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{1,64}/, // email
+  /eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*/, // JWT
+  /eyJ[A-Za-z0-9_-]{10,}/, // a bare JWT segment
+  /(₹|\b(rs|inr)\.?)\s*\d/i, // a money amount
+];
+
+/** Keys whose values are built by our own code (routes, uuids, error class names), never from a token. */
+const OPAQUE_EXEMPT = new Set(["route", "id", "kind"]);
+const OPAQUE_RUN = /[A-Za-z0-9+/=_-]{32,}/g;
+
+/** A base64-style run: 32 or more token characters with a letter and at least two digits. */
+function hasOpaqueRun(value: string): boolean {
+  const runs = value.match(OPAQUE_RUN) ?? [];
+  return runs.some((r) => /[A-Za-z]/.test(r) && (r.match(/\d/g) ?? []).length >= 2);
+}
+
+/** True when a string could carry an email, a token, a code or an amount. Over-long strings are dropped before any regex runs. */
+function isSensitive(value: string, key: string): boolean {
+  if (value.length > MAX_STRING) return true;
+  if (FORBIDDEN_VALUES.some((re) => re.test(value))) return true;
+  if (!OPAQUE_EXEMPT.has(key) && hasOpaqueRun(value)) return true;
+  return /\d{6}/.test(value.replace(/[\s-]/g, "")); // OTP code, even spaced or dashed
+}
+
+/**
+ * Allow-list redaction (LOG-09): only known keys with string, number or boolean values pass,
+ * and strings that look like an email, a token, a code or an amount are dropped. Never throws.
+ */
+export function redact(data: Record<string, unknown> | undefined): Record<string, unknown> {
+  const out: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+  if (!data) return out;
+  try {
+    for (const key of Object.keys(data)) {
+      if (key === "__proto__" || !ALLOWED_KEYS.has(key)) continue;
+      try {
+        const value = data[key];
+        if (typeof value === "number" || typeof value === "boolean") {
+          out[key] = value;
+        } else if (typeof value === "string") {
+          if (key === "errorCode") {
+            out[key] = ERROR_CODE.test(value) ? value : "invalid";
+          } else if (!isSensitive(value, key)) {
+            out[key] = value;
+          }
+        }
+      } catch {
+        // a throwing getter: drop the field
+      }
+    }
+  } catch {
+    // a hostile object: return what we have
+  }
+  return { ...out };
+}
+
+export type Logger = {
+  debug(event: string, data?: Record<string, unknown>): void;
+  info(event: string, data?: Record<string, unknown>): void;
+  warn(event: string, data?: Record<string, unknown>): void;
+  error(event: string, data?: Record<string, unknown>): void;
+};
+
+export function createLogger(opts: {
+  dev: boolean;
+  console: ConsoleLike;
+  sink?: ReportingSink | null | (() => ReportingSink | null);
+}): Logger {
+  const sinkOf = () => (typeof opts.sink === "function" ? opts.sink() : (opts.sink ?? null));
+  const emit = (
+    level: "debug" | "info" | "warn" | "error",
+    event: string,
+    data?: Record<string, unknown>,
+  ) => {
+    try {
+      const safe = redact(data);
+      if (opts.dev) {
+        opts.console[level](event, safe);
+        return;
+      }
+      if (level === "debug") return;
+      sinkOf()?.report(level, event, safe);
+    } catch {
+      // Logging must never break the app.
+    }
+  };
+  return {
+    debug: (e, d) => emit("debug", e, d),
+    info: (e, d) => emit("info", e, d),
+    warn: (e, d) => emit("warn", e, d),
+    error: (e, d) => emit("error", e, d),
+  };
+}
+
+export const log: Logger = createLogger({ dev: __DEV__, console, sink: () => reporting.sink });

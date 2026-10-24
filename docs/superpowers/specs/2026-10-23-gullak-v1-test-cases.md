@@ -45,7 +45,9 @@ Conventions:
 | BUD-29 | Transaction in a closed cycle | spend dated 20 Sep added on 23 Oct | September's history changes; today's budget does not |
 | BUD-30 | Daily budget is not stored | inspect schema | no column holds a daily budget; the value comes from a query |
 | BUD-31 | Whole-rupee daily budget | pool ₹1,000.50 over 3 days | budget ₹333 (33,300 paise); the 150 paise stay in the pool |
-| BUD-32 | First cycle is pro-rated | spendable ₹15,000, setup on 23 Oct, payday 1st (cycle 1–31 Oct, 9 days left) | first-cycle pool ₹4,354; budget ₹483 a day; a "money left" answer of ₹6,000 gives ₹666 a day |
+| BUD-32 | First cycle is budgeted from setup day, pro-rated | spendable ₹15,000, setup on 23 Oct, payday 1st (cycle 1–31 Oct, 9 days left) | first-cycle pool ₹4,354; budget ₹483 a day; a "money left" answer of ₹6,000 gives ₹666 a day |
+| BUD-32b | Money-left answer counts spends since setup | as BUD-32, ₹2,000 spent on 23 Oct after setup, money left ₹6,000 answered on 24 Oct (8 days left) | budget ₹750 a day (the pool is ₹8,000 less ₹2,000 spent, over 8 days) |
+| BUD-32c | Spends before setup do not count | as BUD-32, ₹2,000 spent on 20 Oct before setup | budget stays ₹483 a day; edits to fixed costs change it until a money-left answer is given, after which the pool stays |
 
 ## 2. Goals and catch-up (unit)
 
@@ -497,7 +499,7 @@ One anonymised sample per bank lives in `server/src/test/resources/statements/`.
 
 | ID | Flow | Checks |
 |---|---|---|
-| E2E-01 | Setup | email OTP, income, payday, fixed costs, savings, personality, notification step, first-run Home shows ₹500 |
+| E2E-01 | Setup | email OTP, income, payday, fixed costs, savings, personality, notification step, first-run Home shows "Day one", the Gullak's hello and the pro-rated day-one budget (BUD-32) |
 | E2E-02 | Quick-add | + → ₹250 Eating out UPI → Home shows ₹250 spent and the Gullak reacts |
 | E2E-03 | Edit and delete | open the spend, change to ₹180, save; delete it; Home back to ₹0 |
 | E2E-04 | Statement | Insights → add statement → HDFC sample with password → preview → sort 14 → "All sorted" → Insights totals updated |

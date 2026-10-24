@@ -111,8 +111,8 @@ public abstract class ApiTest {
         return JsonPath.read(body, "$.id");
     }
 
-    /** The spec's example user: ₹50,000 income, ₹15,000 fixed, ₹20,000 savings, payday the 1st. */
-    protected TestUser exampleUser() throws Exception {
+    /** Signed in, fixed costs and profile saved, no cycle yet: the state right after setup. */
+    protected TestUser newlySetUpUser() throws Exception {
         TestUser user = signIn();
         addFixedCost(user, "Rent", 1_000_000);
         addFixedCost(user, "Cook", 200_000);
@@ -120,6 +120,22 @@ public abstract class ApiTest {
         addFixedCost(user, "Monthly groceries", 150_000);
         putProfile(user, EXAMPLE_PROFILE).andExpect(status().isOk());
         return user;
+    }
+
+    /**
+     * The spec's example user, who has been in the 1-31 Oct 2026 cycle since payday: Rs 50,000 income,
+     * Rs 15,000 fixed, Rs 20,000 savings. The cycle is seeded so the first cycle is not pro-rated (BUD-32).
+     */
+    protected TestUser exampleUser() throws Exception {
+        TestUser user = newlySetUpUser();
+        seedCycle(user, "2026-10-01", "2026-10-31");
+        return user;
+    }
+
+    protected void seedCycle(TestUser user, String start, String end) {
+        jdbc.sql("insert into cycles (id, user_id, start_date, end_date) values (?, ?, ?::date, ?::date)")
+            .params(UUID.randomUUID(), user.id(), start, end)
+            .update();
     }
 
     /** Plan 3 adds POST /transactions; until then tests insert spends directly. */

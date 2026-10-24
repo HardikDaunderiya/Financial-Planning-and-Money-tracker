@@ -120,7 +120,7 @@ class LogRedactionApiTest extends ApiTest {
 
     @Test
     void businessEventsAreLoggedWithIdsOnly(CapturedOutput out) throws Exception { // LOG-03
-        TestUser u = exampleUser();
+        TestUser u = newlySetUpUser();
         addFixedCost(u, NAME_1, 123_457);
         seedSpend(u, SPEND, Instant.parse("2026-10-23T03:00:00Z"));
         mvc.perform(get("/api/v1/budget/today").with(auth(u))).andExpect(status().isOk());

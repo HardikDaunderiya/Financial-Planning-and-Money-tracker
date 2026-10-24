@@ -8,3 +8,9 @@ build/
 .env.*
 .DS_Store
 .claude/skills/**/.cache/
+app/.env
+app/.env.*.local
+!app/.env.example
+app/.expo/
+app/dist/
+app/node_modules/

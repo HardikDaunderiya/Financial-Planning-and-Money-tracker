@@ -26,6 +26,7 @@ const FORBIDDEN_VALUES = [
   /[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{1,64}/, // email
   /eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*/, // JWT
   /eyJ[A-Za-z0-9_-]{10,}/, // a bare JWT segment
+  /[A-Za-z0-9_+/=-]{24,}/, // an opaque token or id-like run
   /(₹|\b(rs|inr)\.?)\s*\d/i, // a money amount
 ];
 

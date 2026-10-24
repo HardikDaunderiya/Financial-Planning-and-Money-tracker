@@ -1,17 +1,10 @@
-import { Link } from "expo-router";
+import { Redirect } from "expo-router";
 import React from "react";
-import { Screen } from "@/components/ui/screen";
-import { Text } from "@/components/ui/text";
+import { useSession } from "@/features/auth/session";
 
+/** A path nobody serves, or one the session guards hide, goes to the right front door instead of a dead end. */
 export default function NotFound() {
-  return (
-    <Screen>
-      <Text variant="heading">That page does not exist</Text>
-      <Link href="/" asChild>
-        <Text variant="body" style={{ textDecorationLine: "underline" }} accessibilityRole="link">
-          Go home
-        </Text>
-      </Link>
-    </Screen>
-  );
+  const { status } = useSession();
+  if (status === "loading") return null;
+  return <Redirect href={status === "signedOut" ? "/login" : "/"} />;
 }

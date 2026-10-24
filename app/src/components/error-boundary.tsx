@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { View } from "react-native";
 import { log } from "@/lib/log";
 import { colors, spacing } from "@/theme";
@@ -20,7 +20,7 @@ export class AppErrorBoundary extends React.Component<Props, State> {
   }
 
   override componentDidCatch(error: Error): void {
-    (this.props.report ?? log.error)("boundary.caught", { message: error.message });
+    (this.props.report ?? log.error)("boundary.caught", { kind: error.name });
   }
 
   override render(): React.ReactNode {
@@ -44,7 +44,9 @@ export class AppErrorBoundary extends React.Component<Props, State> {
 
 /** The shape expo-router hands to a route's exported ErrorBoundary. */
 export function RouteErrorFallback({ error, retry }: { error: Error; retry: () => Promise<void> }) {
-  log.error("route.caught", { message: error.message });
+  useEffect(() => {
+    log.error("route.caught", { kind: error.name });
+  }, [error]);
   return (
     <View style={{ flex: 1, justifyContent: "center", padding: spacing.md, backgroundColor: colors.ground }}>
       <ErrorState onRetry={() => void retry()} />

@@ -43,7 +43,73 @@ describe("EmailForm", () => {
   });
 });
 
+describe("EmailForm hardening", () => {
+  it("strips zero-width and bidi characters at the ends and rejects them inside", async () => {
+    const requestCode = jest.fn(() => Promise.resolve());
+    await render(<EmailForm requestCode={requestCode} onSent={() => {}} />);
+    await fireEvent.changeText(screen.getByLabelText("Email"), "\u200B\u202EPriya@Example.com\uFEFF\u2069");
+    await fireEvent.press(screen.getByRole("button", { name: "Send code" }));
+    await waitFor(() => expect(requestCode).toHaveBeenCalledWith("priya@example.com"));
+    await fireEvent.changeText(screen.getByLabelText("Email"), "pri\u200Bya@example.com");
+    await fireEvent.press(screen.getByRole("button", { name: "Send code" }));
+    expect(requestCode).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects over 254 characters and caps the field", async () => {
+    const requestCode = jest.fn(() => Promise.resolve());
+    await render(<EmailForm requestCode={requestCode} onSent={() => {}} />);
+    expect(screen.getByLabelText("Email")).toHaveProp("maxLength", 254);
+    await fireEvent.changeText(screen.getByLabelText("Email"), `${"a".repeat(250)}@x.com`);
+    await fireEvent.press(screen.getByRole("button", { name: "Send code" }));
+    expect(requestCode).not.toHaveBeenCalled();
+  });
+});
+
 describe("CodeForm", () => {
+  it("full-width digits are normalised and submitted", async () => {
+    const verifyCode = jest.fn(() => Promise.resolve({ accessToken: "A", refreshToken: "R", expiresIn: 1 }));
+    await render(
+      <CodeForm
+        email="a@b.co"
+        verifyCode={verifyCode}
+        requestCode={() => Promise.resolve()}
+        onVerified={() => {}}
+      />,
+    );
+    await fireEvent.changeText(screen.getByLabelText("6-digit code"), "１２３４５６");
+    await waitFor(() => expect(verifyCode).toHaveBeenCalledWith("a@b.co", "123456"));
+  });
+
+  it("a paste with more than six digits is rejected, not truncated", async () => {
+    const verifyCode = jest.fn(() => Promise.resolve({ accessToken: "A", refreshToken: "R", expiresIn: 1 }));
+    await render(
+      <CodeForm
+        email="a@b.co"
+        verifyCode={verifyCode}
+        requestCode={() => Promise.resolve()}
+        onVerified={() => {}}
+      />,
+    );
+    await fireEvent.changeText(screen.getByLabelText("6-digit code"), "12345678901");
+    expect(await screen.findByText("Enter the 6-digit code")).toBeTruthy();
+    expect(verifyCode).not.toHaveBeenCalled();
+  });
+
+  it("stays busy and non-editable after a successful verify", async () => {
+    const verifyCode = jest.fn(() => Promise.resolve({ accessToken: "A", refreshToken: "R", expiresIn: 1 }));
+    await render(
+      <CodeForm
+        email="a@b.co"
+        verifyCode={verifyCode}
+        requestCode={() => Promise.resolve()}
+        onVerified={() => {}}
+      />,
+    );
+    await fireEvent.changeText(screen.getByLabelText("6-digit code"), "123456");
+    await waitFor(() => expect(verifyCode).toHaveBeenCalled());
+    expect(screen.getByLabelText("6-digit code").props.editable).toBe(false);
+  });
+
   const pair = { accessToken: "A", refreshToken: "R", expiresIn: 900 };
 
   it("pastedCodeKeepsDigitsOnly and submits at six digits", async () => {

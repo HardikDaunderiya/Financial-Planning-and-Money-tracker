@@ -18,7 +18,7 @@ describe("AppErrorBoundary (ERR-15)", () => {
       </AppErrorBoundary>,
     );
     expect(screen.getByText("Something went wrong")).toBeTruthy();
-    expect(report).toHaveBeenCalledWith("boundary.caught", { message: "render failed" });
+    expect(report).toHaveBeenCalledWith("boundary.caught", { kind: "Error" });
     explode = false;
     await rerender(
       <AppErrorBoundary report={report}>
@@ -27,5 +27,30 @@ describe("AppErrorBoundary (ERR-15)", () => {
     );
     await fireEvent.press(screen.getByRole("button", { name: "Retry" }));
     expect(screen.getByText("fine")).toBeTruthy();
+  });
+
+  it("Retry on a child that still throws shows the fallback again", async () => {
+    const report = jest.fn();
+    await render(
+      <AppErrorBoundary report={report}>
+        <Bomb explode />
+      </AppErrorBoundary>,
+    );
+    await fireEvent.press(screen.getByRole("button", { name: "Retry" }));
+    expect(screen.getByText("Something went wrong")).toBeTruthy();
+    expect(report).toHaveBeenCalledTimes(2);
+  });
+
+  it("never logs the error message", async () => {
+    const report = jest.fn();
+    function Leak(): React.ReactElement {
+      throw new Error("secret thing");
+    }
+    await render(
+      <AppErrorBoundary report={report}>
+        <Leak />
+      </AppErrorBoundary>,
+    );
+    expect(JSON.stringify(report.mock.calls)).not.toContain("secret");
   });
 });

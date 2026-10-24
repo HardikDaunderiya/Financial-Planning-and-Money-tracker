@@ -46,7 +46,7 @@ function tree(session: TokenStore) {
     index: Index,
     login: () => <Text>login screen</Text>,
     "onboarding/income": () => <Text>income screen</Text>,
-    "(tabs)/index": () => <Text>home screen</Text>,
+    home: () => <Text>home screen</Text>,
   };
 }
 
@@ -80,5 +80,33 @@ describe("routing by session and profile", () => {
     mockedUseProfile.mockReturnValue({ data: undefined, isLoading: false, error: new Error("x"), refetch });
     await renderRouter(tree(store({ accessToken: "A", refreshToken: "R" })), { initialUrl: "/" });
     expect(await screen.findByRole("button", { name: "Retry" })).toBeTruthy();
+  });
+
+  it("a paused profile fetch with no cached data shows the offline message with Retry, never a blank screen", async () => {
+    const refetch = jest.fn();
+    mockedUseProfile.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isFetching: false,
+      fetchStatus: "paused",
+      error: null,
+      refetch,
+    });
+    await renderRouter(tree(store({ accessToken: "A", refreshToken: "R" })), { initialUrl: "/" });
+    expect(await screen.findByText("No connection. Check your network and try again.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+  });
+
+  it("while the profile is loading a loading state shows, not nothing", async () => {
+    mockedUseProfile.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isFetching: true,
+      fetchStatus: "fetching",
+      error: null,
+      refetch: jest.fn(),
+    });
+    await renderRouter(tree(store({ accessToken: "A", refreshToken: "R" })), { initialUrl: "/" });
+    expect(await screen.findByTestId("profile-loading")).toBeTruthy();
   });
 });

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { View } from "react-native";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -6,12 +6,9 @@ import { Text } from "@/components/ui/text";
 import { describeError } from "@/lib/api-errors";
 import { messageFor } from "@/lib/errors";
 import { spacing } from "@/theme";
+import { EMAIL_MAX, isValidEmail, normaliseEmail } from "../email";
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
-export function normaliseEmail(raw: string): string {
-  return raw.trim().toLowerCase();
-}
+export { normaliseEmail };
 
 export function EmailForm({
   requestCode,
@@ -23,14 +20,17 @@ export function EmailForm({
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
 
   async function send() {
     const clean = normaliseEmail(email);
-    if (!EMAIL.test(clean)) {
+    if (sendingRef.current) return;
+    if (!isValidEmail(clean)) {
       setError("Enter a valid email address");
       return;
     }
     setError(null);
+    sendingRef.current = true;
     setSending(true);
     try {
       await requestCode(clean);
@@ -38,6 +38,7 @@ export function EmailForm({
     } catch (e) {
       setError(describeError(e, messageFor));
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
   }
@@ -54,6 +55,7 @@ export function EmailForm({
           if (error) setError(null);
         }}
         {...(error ? { error } : {})}
+        maxLength={EMAIL_MAX}
         keyboardType="email-address"
         autoCapitalize="none"
         autoCorrect={false}

@@ -1,4 +1,5 @@
 import "@testing-library/react-native/matchers";
+import { timeoutManager, type ManagedTimerId } from "@tanstack/react-query";
 
 // Reanimated 4 test setup: animations resolve immediately and shared values are plain.
 require("react-native-reanimated").setUpTests();
@@ -40,3 +41,25 @@ jest.mock("expo-notifications", () => ({
 }));
 
 process.env.EXPO_PUBLIC_API_URL = "http://test.local/api/v1";
+
+// The app's shared query client and persister keep timers (garbage collection, the throttled disk write). Settle
+// them once the file's tests are done and their trees are unmounted, so no worker is left with an open handle.
+afterAll(() => {
+  const query = require("@/lib/query") as typeof import("@/lib/query");
+  query.queryClient.clear();
+  query.closePersistence();
+});
+
+// Sign-out clears the query cache while Home is still mounted; unmounting then re-arms the garbage-collection
+// timer of the orphaned query (gcTime is a week, so the persisted cache can outlive a restart). Unref TanStack's
+// timers in tests so such a timer can never keep a Jest worker alive.
+const unref = (t: ReturnType<typeof setTimeout>): ManagedTimerId => {
+  (t as { unref?: () => void }).unref?.();
+  return t;
+};
+timeoutManager.setTimeoutProvider({
+  setTimeout: (cb, ms) => unref(setTimeout(cb, ms)),
+  clearTimeout: (id) => clearTimeout(id as unknown as ReturnType<typeof setTimeout>),
+  setInterval: (cb, ms) => unref(setInterval(cb, ms)),
+  clearInterval: (id) => clearInterval(id as unknown as ReturnType<typeof setInterval>),
+});

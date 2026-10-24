@@ -29,7 +29,7 @@ const put = profileApi.put as jest.Mock;
 const setFirstCycle = budgetApi.setFirstCycle as jest.Mock;
 
 async function setup() {
-  const qc = new QueryClient();
+  const qc = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } });
   const invalidate = jest.spyOn(qc, "invalidateQueries");
   const wrapper = ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>

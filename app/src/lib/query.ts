@@ -55,8 +55,9 @@ export const persister: Persister = {
       return undefined;
     }
   },
+  // Only the key: the persist client also calls this when it discards a blob on restore, and that must not
+  // silence the session. Sign-out closes persistence itself (`forget`) before the wipe.
   removeClient: async () => {
-    closePersistence();
     await AsyncStorage.removeItem(CACHE_KEY);
   },
 };

@@ -139,4 +139,26 @@ describe("OwnedCache", () => {
     await act(() => new Promise((r) => setTimeout(r, 100)));
     expect(screen.getByTestId("shown")).toHaveTextContent("signedIn|-");
   });
+
+  it("after A's blob is discarded for B, B's next cache change is persisted", async () => {
+    await cacheOf(await ownerId("priya@example.com"), "A-LINE");
+    await AsyncStorage.setItem("gullak.me.email", "bob@example.com");
+    const qc = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity, retry: false } } });
+    await render(
+      <SessionProvider
+        store={store({ accessToken: "B", refreshToken: "R" })}
+        logout={() => Promise.resolve()}
+      >
+        <OwnedCache client={qc}>
+          <Shown fetchToday={() => Promise.resolve("B-LINE")} />
+        </OwnedCache>
+      </SessionProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId("shown")).toHaveTextContent("signedIn|B-LINE"));
+    await act(() => new Promise((r) => setTimeout(r, 1400)));
+    const raw = await AsyncStorage.getItem("gullak.query-cache");
+    expect(raw).toContain("B-LINE");
+    expect(raw).not.toContain("A-LINE");
+    expect(raw).toContain(await ownerId("bob@example.com"));
+  });
 });

@@ -110,7 +110,7 @@ describe("RT hostile server payloads on Home", () => {
   const wrap = (data: unknown) => {
     getToday.mockResolvedValue(data);
     const qc = new QueryClient({
-      defaultOptions: { queries: { retry: false, networkMode: "offlineFirst" } },
+      defaultOptions: { queries: { retry: false, networkMode: "offlineFirst", gcTime: Infinity } },
     });
     return render(
       <QueryClientProvider client={qc}>
@@ -232,7 +232,7 @@ describe("RT Home foreground refetch", () => {
       return { remove: () => undefined };
     }) as never);
     getToday.mockImplementation(() => new Promise((r) => setTimeout(() => r(dayA), 50)));
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
     await render(
       <QueryClientProvider client={qc}>
         <HomeScreen now={new Date("2026-10-23T08:00:00Z")} />

@@ -1,4 +1,5 @@
 import { api } from "@/lib/client";
+import { parseToday } from "./today";
 import type { ServerMood } from "@/features/gullak/moods";
 
 export type Today = {
@@ -18,5 +19,6 @@ export type Today = {
 export const budgetApi = {
   /** Raw body: `useToday` validates it with `parseToday` before anything renders. */
   getToday: () => api.get<unknown>("/budget/today"),
-  setFirstCycle: (moneyLeftPaise: number) => api.put<Today>("/budget/first-cycle", { moneyLeftPaise }),
+  setFirstCycle: async (moneyLeftPaise: number): Promise<Today> =>
+    parseToday(await api.put<unknown>("/budget/first-cycle", { moneyLeftPaise })),
 };

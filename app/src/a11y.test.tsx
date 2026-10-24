@@ -136,7 +136,7 @@ describe("the sweep itself", () => {
 
 describe.each(screens)("%s (APP-29)", (_name, element) => {
   it("every control has an accessible name and is at least 44px", async () => {
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
     await render(
       <SafeAreaProvider initialMetrics={metrics}>
         <QueryClientProvider client={qc}>
@@ -152,7 +152,7 @@ describe.each(screens)("%s (APP-29)", (_name, element) => {
 
   it("sweeps the data-driven controls once the data arrives", async () => {
     if (_name !== "FixedCosts" && _name !== "Home") return;
-    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
     await render(
       <SafeAreaProvider initialMetrics={metrics}>
         <QueryClientProvider client={qc}>
